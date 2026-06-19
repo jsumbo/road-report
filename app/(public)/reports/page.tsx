@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { ArrowRight, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";

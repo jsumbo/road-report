@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { supabase } from "@/lib/supabase";
 import { MapView } from "@/components/public/map-view";
 import Link from "next/link";
