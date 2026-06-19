@@ -75,7 +75,7 @@ export function StatusDonutChart({ data }: { data: StatusPoint[] }) {
         </Pie>
         <Tooltip
           contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
-          formatter={(v: number) => [v, "reports"]}
+          formatter={(v) => [v, "reports"]}
         />
         <Legend
           iconType="circle"
