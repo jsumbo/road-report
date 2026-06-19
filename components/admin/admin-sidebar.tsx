@@ -4,14 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, FileText, Menu, X, LogOut, ExternalLink,
+  LayoutDashboard, FileText, ClipboardList, Menu, X, LogOut, ExternalLink,
 } from "lucide-react";
 import { NrfLogo } from "@/components/brand/nrf-logo";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/admin",         label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/admin/reports", label: "Reports",   icon: FileText,        exact: false },
+  { href: "/admin",          label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/admin/reports",  label: "Reports",   icon: FileText,        exact: false },
+  { href: "/admin/surveys",  label: "Surveys",   icon: ClipboardList,   exact: false },
 ];
 
 function NavLinks({ pathname, onNav }: { pathname: string; onNav?: () => void }) {

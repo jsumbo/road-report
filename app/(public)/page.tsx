@@ -52,7 +52,7 @@ export default async function HomePage() {
   return (
     <>
       {/* ── HERO ── */}
-      <section className="relative -mt-20 min-h-screen overflow-hidden bg-[var(--nrf-ink)] text-white">
+      <section className="relative -mt-20 min-h-[520px] overflow-hidden bg-[var(--nrf-ink)] text-white md:min-h-screen">
         <Image
           src="/hero-bg-image.webp"
           alt=""
@@ -62,16 +62,16 @@ export default async function HomePage() {
         />
         <div className="absolute inset-0 bg-gradient-to-r from-[var(--nrf-ink)] via-[var(--nrf-ink)]/85 to-[var(--nrf-ink)]/40" />
 
-        <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-end px-4 pb-16 pt-28 md:px-8 md:pb-28">
-          <h1 className="max-w-3xl font-[family-name:var(--font-heading)] text-4xl font-semibold leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
+        <div className="relative mx-auto flex min-h-[520px] max-w-6xl flex-col justify-center px-4 pb-10 pt-24 md:min-h-screen md:justify-end md:px-8 md:pb-28 md:pt-28">
+          <h1 className="max-w-3xl font-[family-name:var(--font-heading)] text-3xl font-semibold leading-[1.05] tracking-tight sm:text-4xl md:text-6xl lg:text-7xl">
             Help us fix <br className="hidden md:block" />
             Liberia&apos;s roads
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/70 md:text-xl">
+          <p className="mt-4 max-w-xl text-base leading-relaxed text-white/70 md:mt-6 md:text-xl">
             Spotted a damaged road, pothole, or hazard? Report it in minutes — our engineers review every
             submission across all 15 counties.
           </p>
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row md:mt-10">
             <Link href="/submit" className="btn btn-primary btn-lg">
               Report a Road Condition
               <ArrowRight className="size-4" />

@@ -6,9 +6,9 @@ import { Menu, X } from "lucide-react";
 import { NrfLogo } from "@/components/brand/nrf-logo";
 
 const NAV = [
-  { href: "/about", label: "About" },
+  { href: "/about",   label: "About" },
   { href: "/reports", label: "Reports" },
-  { href: "/map", label: "Map" },
+  { href: "/map",     label: "Map" },
 ];
 
 export function SiteHeader() {

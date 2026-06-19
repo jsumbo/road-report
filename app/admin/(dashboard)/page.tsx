@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   MapPin, Calendar, AlertTriangle, Clock, CheckCircle,
-  FileText, ShieldAlert, ArrowRight,
+  FileText, ShieldAlert, ArrowRight, ClipboardList, Star, ThumbsUp, TrendingUp,
 } from "lucide-react";
 import {
   ReportsTimelineChart, StatusDonutChart, CountyBarChart,
@@ -62,6 +62,25 @@ async function getStatCounts() {
   };
 }
 
+async function getSurveyInsights() {
+  const { data } = await supabase
+    .from("citizen_surveys")
+    .select("road_rating, safety_rating, nrf_aware, nrf_satisfaction");
+  if (!data || data.length === 0) return null;
+  const avg = (arr: (number | null)[]) => {
+    const vals = arr.filter((v): v is number => v !== null);
+    return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : null;
+  };
+  const nrfAwarePct = Math.round((data.filter((r) => r.nrf_aware).length / data.length) * 100);
+  return {
+    total:      data.length,
+    avgRoad:    avg(data.map((r) => r.road_rating)),
+    avgSafety:  avg(data.map((r) => r.safety_rating)),
+    avgNrf:     avg(data.map((r) => r.nrf_satisfaction)),
+    nrfAwarePct,
+  };
+}
+
 async function getChartData() {
   const { data } = await supabase
     .from("road_reports")
@@ -103,8 +122,8 @@ async function getChartData() {
 
 /* ── Page ── */
 export default async function AdminDashboardPage() {
-  const [reports, counts, charts] = await Promise.all([
-    getReports(), getStatCounts(), getChartData(),
+  const [reports, counts, charts, survey] = await Promise.all([
+    getReports(), getStatCounts(), getChartData(), getSurveyInsights(),
   ]);
 
   const statCards = [
@@ -136,6 +155,34 @@ export default async function AdminDashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Survey insights row */}
+      {survey && (
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Citizen Survey Insights</p>
+            <a href="/admin/surveys" className="flex items-center gap-1 text-xs font-medium text-[var(--nrf-blue)] hover:underline">
+              View all <ArrowRight className="size-3" />
+            </a>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            {[
+              { label: "Survey Responses", value: String(survey.total),                           icon: ClipboardList, color: "text-[var(--nrf-blue)]",  bg: "bg-[var(--nrf-blue)]/10", raw: true },
+              { label: "Avg Road Rating",  value: survey.avgRoad  ? `${survey.avgRoad}/5`  : "—", icon: Star,          color: "text-amber-600",           bg: "bg-amber-50",             raw: true },
+              { label: "Avg Safety",       value: survey.avgSafety ? `${survey.avgSafety}/5` : "—", icon: ThumbsUp,    color: "text-green-600",           bg: "bg-green-50",             raw: true },
+              { label: "NRF Awareness",    value: `${survey.nrfAwarePct}%`,                       icon: TrendingUp,    color: "text-purple-600",          bg: "bg-purple-50",            raw: true },
+            ].map(({ label, value, icon: Icon, color, bg }) => (
+              <div key={label} className="rounded-xl border border-border bg-white p-4 shadow-sm md:p-5">
+                <div className={cn("flex size-8 items-center justify-center rounded-lg md:size-9", bg)}>
+                  <Icon className={cn("size-4", color)} />
+                </div>
+                <p className={cn("mt-3 text-2xl font-bold tabular-nums md:text-3xl", color)}>{value}</p>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts — stack on mobile, 2-col on md, 3-col on lg */}
       {charts && (
