@@ -7,6 +7,10 @@ import {
   ShieldCheck, TrendingUp, Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  QualityBarChart, IssueFrequencyChart,
+  type QualityPoint, type IssuePoint,
+} from "@/components/admin/dashboard-charts";
 
 export const metadata = { title: "Survey Responses" };
 
@@ -69,6 +73,24 @@ async function getAverages() {
 export default async function SurveysPage() {
   const [surveys, avgs] = await Promise.all([getSurveys(), getAverages()]);
 
+  const qualityDist: QualityPoint[] = [
+    { label: "Very Good", count: surveys.filter((r) => r.road_rating === 5).length },
+    { label: "Good",      count: surveys.filter((r) => r.road_rating === 4).length },
+    { label: "Average",   count: surveys.filter((r) => r.road_rating === 3).length },
+    { label: "Poor",      count: surveys.filter((r) => r.road_rating === 2).length },
+    { label: "Very Poor", count: surveys.filter((r) => r.road_rating === 1).length },
+  ];
+
+  const issueCounts: Record<string, number> = {};
+  for (const s of surveys) {
+    for (const p of (s.road_problems ?? [])) {
+      issueCounts[p] = (issueCounts[p] ?? 0) + 1;
+    }
+  }
+  const issueFreq: IssuePoint[] = Object.entries(issueCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([issue, count]) => ({ issue, count }));
+
   const kpis = [
     { label: "Responses",            value: String(avgs.total),                     icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10" },
     { label: "Avg Road Rating",      value: avgs.road   ? `${avgs.road}/5`   : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50" },
@@ -104,6 +126,22 @@ export default async function SurveysPage() {
           </div>
         ))}
       </div>
+
+      {/* Charts — only when there's data */}
+      {surveys.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-border bg-white p-5 shadow-sm md:p-6">
+            <p className="mb-1 text-sm font-semibold">Count vs. Quality</p>
+            <p className="mb-4 text-xs text-muted-foreground">Road quality ratings from citizens</p>
+            <QualityBarChart data={qualityDist} />
+          </div>
+          <div className="rounded-xl border border-border bg-white p-5 shadow-sm md:p-6">
+            <p className="mb-1 text-sm font-semibold">Frequency vs. Issue</p>
+            <p className="mb-4 text-xs text-muted-foreground">Most commonly reported road problems</p>
+            <IssueFrequencyChart data={issueFreq} />
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-xl border border-border bg-white shadow-sm">

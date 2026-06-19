@@ -3,6 +3,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
+  LineChart, Line, Dot,
 } from "recharts";
 
 /* ── Reports over time (bar chart) ── */
@@ -83,6 +84,74 @@ export function StatusDonutChart({ data }: { data: StatusPoint[] }) {
           formatter={(v) => <span style={{ fontSize: 11, color: "#6b7280" }}>{v}</span>}
         />
       </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* ── Survey quality distribution (bar) ── */
+export interface QualityPoint { label: string; count: number }
+
+const QUALITY_COLORS: Record<string, string> = {
+  "Very Good": "#22c55e",
+  "Good":      "#86efac",
+  "Average":   "#f59e0b",
+  "Poor":      "#f97316",
+  "Very Poor": "#e0001a",
+};
+
+export function QualityBarChart({ data }: { data: QualityPoint[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+        <Tooltip
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+          cursor={{ fill: "#f3f4f6" }}
+          formatter={(v) => [v, "responses"]}
+        />
+        <Bar dataKey="count" name="Responses" radius={[4, 4, 0, 0]} maxBarSize={48}>
+          {data.map((entry) => (
+            <Cell key={entry.label} fill={QUALITY_COLORS[entry.label] ?? "#333e8d"} />
+          ))}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* ── Issue frequency (line) ── */
+export interface IssuePoint { issue: string; count: number }
+
+export function IssueFrequencyChart({ data }: { data: IssuePoint[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <LineChart data={data} margin={{ top: 4, right: 16, left: -20, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+        <XAxis
+          dataKey="issue"
+          tick={{ fontSize: 10, fill: "#6b7280" }}
+          axisLine={false}
+          tickLine={false}
+          interval={0}
+          width={60}
+        />
+        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+        <Tooltip
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+          formatter={(v) => [v, "mentions"]}
+        />
+        <Line
+          type="monotone"
+          dataKey="count"
+          name="Frequency"
+          stroke="#333e8d"
+          strokeWidth={2.5}
+          dot={<Dot r={4} fill="#333e8d" strokeWidth={0} />}
+          activeDot={{ r: 5 }}
+        />
+      </LineChart>
     </ResponsiveContainer>
   );
 }
