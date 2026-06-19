@@ -203,14 +203,14 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         if (!geom) return;
         // Save raw feature for the country outline
         setOutline({ type: "Feature", geometry: geom, properties: {} });
-        // Build world-minus-Liberia mask
+        // Build world-minus-Liberia mask (reverse hole coords for correct winding)
         const worldRing: [number, number][] = [
           [-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90],
         ];
         const holes: [number, number][][] =
           geom.type === "Polygon"
-            ? [geom.coordinates[0]]
-            : geom.coordinates.map((poly: [number, number][][]) => poly[0]);
+            ? [[...geom.coordinates[0]].reverse()]
+            : geom.coordinates.map((poly: [number, number][][]) => [...poly[0]].reverse());
         setMask({
           type: "Feature",
           geometry: { type: "Polygon", coordinates: [worldRing, ...holes] },
@@ -316,8 +316,9 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
           data={mask}
           pane="mask-pane"
           style={() => ({
-            fillColor:   "#f8f9f5",
+            fillColor:   "#f0f0ea",
             fillOpacity: 1,
+            fillRule:    "evenodd",
             color:       "transparent",
             weight:      0,
           })}
