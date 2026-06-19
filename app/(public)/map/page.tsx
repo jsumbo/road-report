@@ -51,10 +51,38 @@ async function getMapReports(): Promise<MapReport[]> {
 }
 
 const SEVERITY_LEGEND = [
-  { label: "Low",      color: "#22c55e" },
-  { label: "Medium",   color: "#f59e0b" },
-  { label: "High",     color: "#f97316" },
-  { label: "Critical", color: "#e0001a" },
+  {
+    label: "Low", color: "#22c55e",
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Medium", color: "#f59e0b",
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    ),
+  },
+  {
+    label: "High", color: "#f97316",
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Critical", color: "#e0001a",
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+      </svg>
+    ),
+  },
 ];
 
 export default async function MapPage() {
@@ -74,18 +102,32 @@ export default async function MapPage() {
           </div>
 
           {/* Severity legend */}
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <span className="text-xs font-medium text-muted-foreground">Severity:</span>
-            {SEVERITY_LEGEND.map(({ label, color }) => (
-              <span key={label} className="flex items-center gap-1.5 text-xs font-medium">
-                <span style={{
-                  display: "inline-block",
-                  width: 16, height: 16,
-                  borderRadius: 4,
-                  border: `2.5px solid ${color}`,
-                  background: "#fff",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                }} />
+          <div className="mt-4 flex flex-wrap items-center gap-5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Severity</span>
+            {SEVERITY_LEGEND.map(({ label, color, icon }) => (
+              <span key={label} className="flex items-center gap-2 text-xs font-medium text-foreground">
+                <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center" }}>
+                  <span style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 22, height: 22,
+                    borderRadius: 5,
+                    border: `2.5px solid ${color}`,
+                    background: "#fff",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                    color,
+                  }}>
+                    {icon}
+                  </span>
+                  <span style={{
+                    width: 0, height: 0,
+                    borderLeft: "6px solid transparent",
+                    borderRight: "6px solid transparent",
+                    borderTop: `7px solid ${color}`,
+                    marginTop: -1,
+                  }} />
+                </span>
                 {label}
               </span>
             ))}

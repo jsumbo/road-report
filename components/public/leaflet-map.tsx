@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
-  MapContainer, TileLayer, Marker, Popup, Pane,
+  MapContainer, TileLayer, Marker, Popup, Pane, Polygon,
   LayersControl, GeoJSON, useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -32,19 +32,28 @@ const SEVERITY_TEXT: Record<string, string> = {
   critical: "#7f1d1d",
 };
 
+/* ── Severity icon SVG for pin placeholder ── */
+function severityIconSvg(severity: string, color: string): string {
+  const attrs = `width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  switch (severity) {
+    case "low":
+      return `<svg ${attrs}><polyline points="20 6 9 17 4 12"/></svg>`;
+    case "medium":
+      return `<svg ${attrs}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+    case "high":
+      return `<svg ${attrs}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    default:
+      return `<svg ${attrs}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+  }
+}
+
 /* ── Photo-card marker icon ── */
 function pinIcon(severity: string, photoUrl?: string | null) {
   const color = SEVERITY_COLOR[severity] ?? "#6b7280";
   const inner = photoUrl
     ? `<img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;display:block;" />`
     : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f1f5f9;">
-         <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-              stroke="${color}" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round">
-           <rect x="3" y="3" width="18" height="18" rx="2"/>
-           <circle cx="8.5" cy="8.5" r="1.5"/>
-           <polyline points="21,15 16,10 5,21"/>
-         </svg>
+         ${severityIconSvg(severity, color)}
        </div>`;
   return L.divIcon({
     className: "",
@@ -80,7 +89,7 @@ function SizeInvalidator() {
 function LiberiaBoundsController() {
   const map = useMap();
   useEffect(() => {
-    map.setView([6.45, -9.43], 8);
+    map.setView([6.45, -9.43], 7);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
@@ -174,12 +183,14 @@ function CountyLayer({
   );
 }
 
+/* ── Mask constant — [lat, lon] Leaflet format ── */
+const MASK_BBOX: [number, number][] = [[-5, -25], [-5, 15], [25, 15], [25, -25]];
+
 /* ── Main export ── */
 export function LeafletMap({ reports }: { reports: MapReport[] }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [borders, setBorders] = useState<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [mask,    setMask]    = useState<any>(null);
+  const [mask,    setMask]    = useState<[number, number][][] | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [outline, setOutline] = useState<any>(null);
   const [activeLayer,  setActiveLayer]  = useState("Light");
@@ -203,19 +214,14 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         if (!geom) return;
         // Save raw feature for the country outline
         setOutline({ type: "Feature", geometry: geom, properties: {} });
-        // Build mask: large bounding box with Liberia cut out (evenodd fill rule handles the hole)
-        const bbox: [number, number][] = [
-          [-25, -5], [15, -5], [15, 25], [-25, 25], [-25, -5],
-        ];
-        const liberiaRing: [number, number][][] =
+        // Update mask with accurate GADM ring(s) — convert GeoJSON [lon,lat] → Leaflet [lat,lon]
+        const toLL = (ring: number[][]): [number, number][] =>
+          ring.map(([lon, lat]) => [lat, lon] as [number, number]);
+        const liberiaRings: [number, number][][] =
           geom.type === "Polygon"
-            ? [geom.coordinates[0]]
-            : geom.coordinates.map((poly: [number, number][][]) => poly[0]);
-        setMask({
-          type: "Feature",
-          geometry: { type: "Polygon", coordinates: [bbox, ...liberiaRing] },
-          properties: {},
-        });
+            ? [toLL(geom.coordinates[0])]
+            : (geom.coordinates as number[][][][]).map(poly => toLL(poly[0]));
+        setMask([MASK_BBOX, ...liberiaRings]);
       })
       .catch(() => {});
 
@@ -275,8 +281,8 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
       zoom={7}
       minZoom={6}
       maxZoom={17}
-      maxBounds={[[3.8, -12.2], [8.9, -6.8]]}
-      maxBoundsViscosity={1.0}
+      maxBounds={[[1, -16], [12, -3]]}
+      maxBoundsViscosity={0.8}
       style={{ height: "100%", width: "100%", minHeight: 400 }}
       scrollWheelZoom
     >
@@ -309,19 +315,17 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
       <LiberiaBoundsController />
       <LayerTracker onLayerChange={handleLayerChange} />
 
-      {/* ── Outside-Liberia mask ── */}
+      {/* ── Outside-Liberia mask — bbox outer ring + Liberia hole (Leaflet evenodd default) ── */}
       {mask && (
-        <GeoJSON
-          key="mask"
-          data={mask}
+        <Polygon
           pane="mask-pane"
-          style={() => ({
-            fillColor:   "#b8b4ae",
-            fillOpacity: 0.72,
-            fillRule:    "evenodd" as const,
+          positions={mask}
+          pathOptions={{
+            fillColor:   "#a8a49e",
+            fillOpacity: 0.88,
             color:       "transparent",
             weight:      0,
-          })}
+          }}
         />
       )}
 
