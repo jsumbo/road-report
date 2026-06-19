@@ -180,7 +180,9 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
   const [borders, setBorders] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [mask,    setMask]    = useState<any>(null);
-  const [activeLayer, setActiveLayer] = useState("Terrain");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [outline, setOutline] = useState<any>(null);
+  const [activeLayer, setActiveLayer] = useState("Street");
 
   /* Count reports per county to display in county popups */
   const countyCounts = useMemo(() => {
@@ -190,13 +192,16 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
   }, [reports]);
 
   useEffect(() => {
-    /* World-minus-Liberia mask */
+    /* World-minus-Liberia mask + country outline */
     fetch("https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_LBR_0.json")
       .then((r) => r.json())
       .then((data) => {
         const feature = (data.features ?? [data])[0];
         const geom = feature?.geometry;
         if (!geom) return;
+        // Save raw feature for the country outline
+        setOutline({ type: "Feature", geometry: geom, properties: {} });
+        // Build world-minus-Liberia mask
         const worldRing: [number, number][] = [
           [-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90],
         ];
@@ -234,6 +239,7 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
     >
       {/* ── Custom panes — control rendering order ── */}
       <Pane name="mask-pane"     style={{ zIndex: 350 }} />
+      <Pane name="outline-pane"  style={{ zIndex: 360 }} />
       <Pane name="counties-pane" style={{ zIndex: 400 }} />
       <Pane name="reports-pane"  style={{ zIndex: 600 }} />
 
@@ -272,6 +278,23 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
             color:       "transparent",
             weight:      0,
           })}
+        />
+      )}
+
+      {/* ── Liberia country outline ── */}
+      {outline && (
+        <GeoJSON
+          key={`outline-${activeLayer}`}
+          data={outline}
+          pane="outline-pane"
+          interactive={false}
+          style={() =>
+            activeLayer === "Dark"
+              ? { color: "#94a3b8", weight: 2.5, opacity: 0.9, fillOpacity: 0 }
+              : activeLayer === "Satellite"
+              ? { color: "#ffffff", weight: 2.5, opacity: 0.9, fillOpacity: 0 }
+              : { color: "#1e3a5f", weight: 2.5, opacity: 0.85, fillColor: "#e8e4dc", fillOpacity: 0.12 }
+          }
         />
       )}
 
