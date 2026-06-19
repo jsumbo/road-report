@@ -316,11 +316,11 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
           data={mask}
           pane="mask-pane"
           style={() => ({
-            fillColor:   "#f2efe9",
-            fillOpacity: 1,
+            fillColor:   "#b8b4ae",
+            fillOpacity: 0.72,
             fillRule:    "evenodd" as const,
-            color:       "#d1cdc7",
-            weight:      0.5,
+            color:       "transparent",
+            weight:      0,
           })}
         />
       )}
