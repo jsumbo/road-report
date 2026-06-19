@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   MapContainer, TileLayer, Marker, Popup, Pane,
   LayersControl, GeoJSON, useMap,
@@ -182,7 +182,9 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
   const [mask,    setMask]    = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [outline, setOutline] = useState<any>(null);
-  const [activeLayer, setActiveLayer] = useState("Street");
+  const [activeLayer,  setActiveLayer]  = useState("Street");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   /* Count reports per county to display in county popups */
   const countyCounts = useMemo(() => {
@@ -226,7 +228,48 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
 
   const handleLayerChange = useCallback((name: string) => setActiveLayer(name), []);
 
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
   return (
+    <div ref={wrapperRef} className="relative h-full w-full">
+      {/* Fullscreen toggle button */}
+      <button
+        onClick={toggleFullscreen}
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+        style={{
+          position: "absolute", bottom: 32, right: 10, zIndex: 1000,
+          background: "#fff", border: "2px solid rgba(0,0,0,0.2)",
+          borderRadius: 4, width: 30, height: 30,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+        }}
+      >
+        {isFullscreen ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+            <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 7V3h4"/><path d="M21 7V3h-4"/>
+            <path d="M3 17v4h4"/><path d="M21 17v4h-4"/>
+          </svg>
+        )}
+      </button>
     <MapContainer
       center={[6.5, -9.4]}
       zoom={7}
@@ -290,10 +333,10 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
           interactive={false}
           style={() =>
             activeLayer === "Dark"
-              ? { color: "#94a3b8", weight: 2.5, opacity: 0.9, fillOpacity: 0 }
+              ? { color: "#e2e8f0", weight: 3, opacity: 1, fillOpacity: 0 }
               : activeLayer === "Satellite"
-              ? { color: "#ffffff", weight: 2.5, opacity: 0.9, fillOpacity: 0 }
-              : { color: "#1e3a5f", weight: 2.5, opacity: 0.85, fillColor: "#e8e4dc", fillOpacity: 0.12 }
+              ? { color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0 }
+              : { color: "#1e3a8a", weight: 3.5, opacity: 1, fillColor: "#dbeafe", fillOpacity: 0.18 }
           }
         />
       )}
@@ -363,5 +406,6 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         </Marker>
       ))}
     </MapContainer>
+    </div>
   );
 }
