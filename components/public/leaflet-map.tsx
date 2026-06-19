@@ -182,7 +182,7 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
   const [mask,    setMask]    = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [outline, setOutline] = useState<any>(null);
-  const [activeLayer,  setActiveLayer]  = useState("Street");
+  const [activeLayer,  setActiveLayer]  = useState("Light");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -203,17 +203,17 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         if (!geom) return;
         // Save raw feature for the country outline
         setOutline({ type: "Feature", geometry: geom, properties: {} });
-        // Build world-minus-Liberia mask (reverse hole coords for correct winding)
-        const worldRing: [number, number][] = [
-          [-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90],
+        // Build mask: large bounding box with Liberia cut out (evenodd fill rule handles the hole)
+        const bbox: [number, number][] = [
+          [-25, -5], [15, -5], [15, 25], [-25, 25], [-25, -5],
         ];
-        const holes: [number, number][][] =
+        const liberiaRing: [number, number][][] =
           geom.type === "Polygon"
-            ? [[...geom.coordinates[0]].reverse()]
-            : geom.coordinates.map((poly: [number, number][][]) => [...poly[0]].reverse());
+            ? [geom.coordinates[0]]
+            : geom.coordinates.map((poly: [number, number][][]) => poly[0]);
         setMask({
           type: "Feature",
-          geometry: { type: "Polygon", coordinates: [worldRing, ...holes] },
+          geometry: { type: "Polygon", coordinates: [bbox, ...liberiaRing] },
           properties: {},
         });
       })
@@ -288,10 +288,10 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
 
       {/* ── Base tile layers ── */}
       <LayersControl position="topright">
-        <BaseLayer checked name="Street">
+        <BaseLayer name="Street">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" maxZoom={19} />
         </BaseLayer>
-        <BaseLayer name="Light">
+        <BaseLayer checked name="Light">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" maxZoom={19} />
         </BaseLayer>
         <BaseLayer name="Dark">
@@ -316,11 +316,11 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
           data={mask}
           pane="mask-pane"
           style={() => ({
-            fillColor:   "#f0f0ea",
+            fillColor:   "#f2efe9",
             fillOpacity: 1,
-            fillRule:    "evenodd",
-            color:       "transparent",
-            weight:      0,
+            fillRule:    "evenodd" as const,
+            color:       "#d1cdc7",
+            weight:      0.5,
           })}
         />
       )}
