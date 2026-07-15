@@ -4,7 +4,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import {
   Calendar, ClipboardList, MapPin, Star, FileText,
-  ShieldCheck, TrendingUp, Wrench,
+  ShieldCheck, TrendingUp, Wrench, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -14,11 +14,16 @@ import {
 
 export const metadata = { title: "Survey Responses" };
 
-const MAINT_LABELS: Record<string, string> = {
-  yes: "Yes", no: "No", unsure: "Not sure",
+const ROAD_USER_LABELS: Record<string, string> = {
+  driver: "Driver", pedestrian: "Pedestrian",
+  public_transport: "Public Transport", trader: "Trader",
 };
-const COST_LABELS: Record<string, string> = {
-  increased: "↑ Increased", same: "→ Same", decreased: "↓ Decreased",
+const RESPONSE_TIME_LABELS: Record<string, string> = {
+  within_1m: "≤ 1 Month", within_3m: "≤ 3 Months", within_6m: "≤ 6 Months",
+  over_6m: "> 6 Months", no_response: "No Response",
+};
+const HOLDING_UP_LABELS: Record<string, string> = {
+  yes: "Yes", somewhat: "Somewhat", no: "No",
 };
 
 function RatingBadge({ value }: { value: number | null }) {
@@ -47,10 +52,13 @@ async function getSurveys() {
 async function getAverages() {
   const { data } = await supabase
     .from("citizen_surveys")
-    .select("road_rating, safety_rating, maint_satisfaction, nrf_satisfaction, nrf_aware, maintenance_done, transport_cost");
+    .select("road_rating, nrf_satisfaction, value_for_money, nrf_aware, holding_up, response_time, transport_improvement");
 
   if (!data || data.length === 0) {
-    return { total: 0, road: null, safety: null, maint: null, nrf: null, nrfAwarePct: 0, maintDonePct: 0, costIncrPct: 0 };
+    return {
+      total: 0, road: null, nrf: null, valueForMoney: null,
+      nrfAwarePct: 0, holdingUpPct: 0, quickResponsePct: 0, transportImprovedPct: 0,
+    };
   }
 
   const avg = (arr: (number | null)[]) => {
@@ -59,14 +67,14 @@ async function getAverages() {
   };
 
   return {
-    total:        data.length,
-    road:         avg(data.map((r) => r.road_rating)),
-    safety:       avg(data.map((r) => r.safety_rating)),
-    maint:        avg(data.map((r) => r.maint_satisfaction)),
-    nrf:          avg(data.map((r) => r.nrf_satisfaction)),
-    nrfAwarePct:  Math.round((data.filter((r) => r.nrf_aware).length / data.length) * 100),
-    maintDonePct: Math.round((data.filter((r) => r.maintenance_done === "yes").length / data.length) * 100),
-    costIncrPct:  Math.round((data.filter((r) => r.transport_cost === "increased").length / data.length) * 100),
+    total:                data.length,
+    road:                 avg(data.map((r) => r.road_rating)),
+    nrf:                  avg(data.map((r) => r.nrf_satisfaction)),
+    valueForMoney:        avg(data.map((r) => r.value_for_money)),
+    nrfAwarePct:          Math.round((data.filter((r) => r.nrf_aware).length / data.length) * 100),
+    holdingUpPct:         Math.round((data.filter((r) => r.holding_up === "yes").length / data.length) * 100),
+    quickResponsePct:     Math.round((data.filter((r) => r.response_time === "within_1m" || r.response_time === "within_3m").length / data.length) * 100),
+    transportImprovedPct: Math.round((data.filter((r) => r.transport_improvement === "significantly" || r.transport_improvement === "somewhat").length / data.length) * 100),
   };
 }
 
@@ -92,14 +100,14 @@ export default async function SurveysPage() {
     .map(([issue, count]) => ({ issue, count }));
 
   const kpis = [
-    { label: "Responses",            value: String(avgs.total),                     icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10" },
-    { label: "Avg Road Rating",      value: avgs.road   ? `${avgs.road}/5`   : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50" },
-    { label: "Avg Safety Rating",    value: avgs.safety ? `${avgs.safety}/5` : "—", icon: ShieldCheck,   color: "text-green-600",          bg: "bg-green-50" },
-    { label: "NRF Awareness",        value: `${avgs.nrfAwarePct}%`,                 icon: TrendingUp,    color: "text-purple-600",         bg: "bg-purple-50" },
-    { label: "Avg NRF Satisfaction", value: avgs.nrf    ? `${avgs.nrf}/5`    : "—", icon: Star,          color: "text-purple-600",         bg: "bg-purple-50" },
-    { label: "Maintenance Done",     value: `${avgs.maintDonePct}%`,                icon: Wrench,        color: "text-orange-600",         bg: "bg-orange-50" },
-    { label: "Avg Maint. Sat.",      value: avgs.maint  ? `${avgs.maint}/5`  : "—", icon: Wrench,        color: "text-orange-600",         bg: "bg-orange-50" },
-    { label: "Transport Cost Up",    value: `${avgs.costIncrPct}%`,                 icon: TrendingUp,    color: "text-red-600",            bg: "bg-red-50" },
+    { label: "Responses",             value: String(avgs.total),                                icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10" },
+    { label: "Avg Road Rating",       value: avgs.road          ? `${avgs.road}/5`          : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50" },
+    { label: "Avg NRF Satisfaction",  value: avgs.nrf           ? `${avgs.nrf}/5`           : "—", icon: ShieldCheck,   color: "text-green-600",          bg: "bg-green-50" },
+    { label: "Avg Value for Money",   value: avgs.valueForMoney ? `${avgs.valueForMoney}/5` : "—", icon: Star,          color: "text-purple-600",         bg: "bg-purple-50" },
+    { label: "NRF Awareness",         value: `${avgs.nrfAwarePct}%`,                              icon: TrendingUp,    color: "text-purple-600",         bg: "bg-purple-50" },
+    { label: "Road Holding Up",       value: `${avgs.holdingUpPct}%`,                             icon: Wrench,        color: "text-orange-600",         bg: "bg-orange-50" },
+    { label: "Quick Response (≤3mo)", value: `${avgs.quickResponsePct}%`,                         icon: Wrench,        color: "text-orange-600",         bg: "bg-orange-50" },
+    { label: "Transport Improved",    value: `${avgs.transportImprovedPct}%`,                     icon: TrendingUp,    color: "text-red-600",            bg: "bg-red-50" },
   ] as const;
 
   return (
@@ -157,9 +165,9 @@ export default async function SurveysPage() {
                   <th className="px-4 py-3 text-left">Reference</th>
                   <th className="px-4 py-3 text-left">Location</th>
                   <th className="px-4 py-3 text-left">Road</th>
-                  <th className="px-4 py-3 text-left">Safety</th>
-                  <th className="hidden px-4 py-3 text-left md:table-cell">Maintenance</th>
-                  <th className="hidden px-4 py-3 text-left lg:table-cell">Transport</th>
+                  <th className="hidden px-4 py-3 text-left md:table-cell">User Type</th>
+                  <th className="hidden px-4 py-3 text-left md:table-cell">Response Time</th>
+                  <th className="hidden px-4 py-3 text-left lg:table-cell">NRF Sat.</th>
                   <th className="hidden px-4 py-3 text-left lg:table-cell">Report</th>
                   <th className="hidden px-4 py-3 text-left xl:table-cell">Submitted</th>
                 </tr>
@@ -177,16 +185,17 @@ export default async function SurveysPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><RatingBadge value={s.road_rating} /></td>
-                    <td className="px-4 py-3"><RatingBadge value={s.safety_rating} /></td>
                     <td className="hidden px-4 py-3 md:table-cell">
-                      <span className="text-xs text-muted-foreground">
-                        {MAINT_LABELS[s.maintenance_done] ?? s.maintenance_done}
-                        {s.maint_satisfaction ? ` · ${s.maint_satisfaction}/5` : ""}
-                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Users className="size-3 shrink-0" />
+                        {ROAD_USER_LABELS[s.road_user_type] ?? s.road_user_type}
+                      </div>
                     </td>
-                    <td className="hidden px-4 py-3 lg:table-cell text-xs text-muted-foreground">
-                      {COST_LABELS[s.transport_cost] ?? s.transport_cost}
+                    <td className="hidden px-4 py-3 md:table-cell text-xs text-muted-foreground">
+                      {RESPONSE_TIME_LABELS[s.response_time] ?? s.response_time}
+                      {s.holding_up ? ` · Holding up: ${HOLDING_UP_LABELS[s.holding_up] ?? s.holding_up}` : ""}
                     </td>
+                    <td className="hidden px-4 py-3 lg:table-cell"><RatingBadge value={s.nrf_satisfaction} /></td>
                     <td className="hidden px-4 py-3 lg:table-cell">
                       {s.report_reference ? (
                         <Link

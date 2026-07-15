@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   CheckCircle, ChevronRight, ChevronLeft, ChevronDown, Loader2, MapPin, Upload, X,
   CircleDot, Waves, Milestone, Mountain, ShieldOff, AlertTriangle, Wrench, HelpCircle,
   AlertCircle, XCircle, Star, TrendingUp, Minus, TrendingDown, Building2,
-  Layers, Moon, Droplets, ShoppingBag, Heart, GraduationCap, Briefcase,
+  Droplets, Car, PersonStanding, Bus, Store, Split, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -47,12 +47,55 @@ const SEVERITY_OPTIONS: (SelectOption & { desc: string; banner: string })[] = [
   { value: "critical", label: "Critical", desc: "Impassable or life-threatening",      icon: XCircle,      banner: "border-red-200 bg-red-50 text-red-800" },
 ];
 
-const RATING_OPTIONS: SelectOption[] = [
-  { value: "1", label: "1 — Very Poor / Very Unsafe",  icon: Star },
-  { value: "2", label: "2 — Poor / Unsafe",            icon: Star },
-  { value: "3", label: "3 — Fair / Neutral",           icon: Star },
-  { value: "4", label: "4 — Good / Safe",              icon: Star },
-  { value: "5", label: "5 — Very Good / Very Safe",    icon: Star },
+const ROAD_USER_OPTIONS: SelectOption[] = [
+  { value: "driver",           label: "Driver (Motorcyclist / Kehkeh Rider / Cyclist)",        icon: Car },
+  { value: "pedestrian",       label: "Pedestrian (children, elderly, vulnerable people)",      icon: PersonStanding },
+  { value: "public_transport", label: "Public Transport / Commercial / Heavy Duty Driver",      icon: Bus },
+  { value: "trader",           label: "Trader",                                                icon: Store },
+];
+
+const ROAD_CONDITION_OPTIONS: SelectOption[] = [
+  { value: "5", label: "Very Good", icon: Star },
+  { value: "4", label: "Good",      icon: Star },
+  { value: "3", label: "Fair",      icon: Star },
+  { value: "2", label: "Poor",      icon: Star },
+  { value: "1", label: "Very Poor", icon: Star },
+];
+
+const HOLDING_UP_OPTIONS: SelectOption[] = [
+  { value: "yes",      label: "Yes",      icon: CheckCircle },
+  { value: "somewhat", label: "Somewhat", icon: AlertCircle },
+  { value: "no",       label: "No",       icon: XCircle },
+];
+
+const RESPONSE_TIME_OPTIONS: SelectOption[] = [
+  { value: "within_1m",   label: "Within 1 Month",     icon: Clock },
+  { value: "within_3m",   label: "Within 3 Months",    icon: Clock },
+  { value: "within_6m",   label: "Within 6 Months",    icon: Clock },
+  { value: "over_6m",     label: "More than 6 Months", icon: Clock },
+  { value: "no_response", label: "No Response",        icon: XCircle },
+];
+
+const TRANSPORT_IMPROVEMENT_OPTIONS: SelectOption[] = [
+  { value: "significantly", label: "Significantly",     icon: TrendingUp },
+  { value: "somewhat",      label: "Somewhat",          icon: TrendingUp },
+  { value: "no_change",     label: "No Change",         icon: Minus },
+  { value: "worse",         label: "Made Things Worse", icon: TrendingDown },
+];
+
+const ACCESS_IMPROVEMENT_OPTIONS: SelectOption[] = [
+  { value: "significantly", label: "Significantly", icon: TrendingUp },
+  { value: "somewhat",      label: "Somewhat",      icon: TrendingUp },
+  { value: "no_change",     label: "No Change",     icon: Minus },
+  { value: "not_at_all",    label: "Not at All",    icon: TrendingDown },
+];
+
+const AGREEMENT_OPTIONS: SelectOption[] = [
+  { value: "5", label: "Strongly Agree",    icon: Star },
+  { value: "4", label: "Agree",             icon: Star },
+  { value: "3", label: "Neutral",           icon: Star },
+  { value: "2", label: "Disagree",          icon: Star },
+  { value: "1", label: "Strongly Disagree", icon: Star },
 ];
 
 const SATISFACTION_OPTIONS: SelectOption[] = [
@@ -63,49 +106,26 @@ const SATISFACTION_OPTIONS: SelectOption[] = [
   { value: "5", label: "5 — Very Satisfied",    icon: Star },
 ];
 
-const MAINT_DONE_OPTIONS: SelectOption[] = [
-  { value: "yes",    label: "Yes",      icon: CheckCircle },
-  { value: "no",     label: "No",       icon: XCircle },
-  { value: "unsure", label: "Not sure", icon: HelpCircle },
-];
-
-const MAINT_DELIVERED_OPTIONS: SelectOption[] = [
-  { value: "yes",       label: "Yes, fully", icon: CheckCircle },
-  { value: "partially", label: "Partially",  icon: AlertCircle },
-  { value: "no",        label: "No",         icon: XCircle },
-];
-
-const TRANSPORT_OPTIONS: SelectOption[] = [
-  { value: "increased", label: "Increased",       icon: TrendingUp },
-  { value: "same",      label: "Stayed the same", icon: Minus },
-  { value: "decreased", label: "Decreased",       icon: TrendingDown },
-];
-
 const NRF_AWARE_OPTIONS: SelectOption[] = [
   { value: "yes", label: "Yes", icon: Building2 },
   { value: "no",  label: "No",  icon: HelpCircle },
 ];
 
+const CONDITION_TO_PROBLEM: Partial<Record<string, string>> = {
+  pothole:         "Potholes",
+  road_erosion:    "Erosion",
+  damaged_culvert: "Poor Drainage",
+};
+
 const ROAD_PROBLEM_OPTIONS: CheckOption[] = [
-  { value: "Potholes",         label: "Potholes",         icon: CircleDot },
-  { value: "Uneven surface",   label: "Uneven surface",   icon: Layers },
-  { value: "Flooding",         label: "Flooding",         icon: Waves },
-  { value: "No lighting",      label: "No lighting",      icon: Moon },
-  { value: "Damaged bridges",  label: "Damaged bridges",  icon: Milestone },
-  { value: "Poor drainage",    label: "Poor drainage",    icon: Droplets },
-  { value: "Road erosion",     label: "Road erosion",     icon: Mountain },
-  { value: "Other",            label: "Other",            icon: HelpCircle },
+  { value: "Potholes",          label: "Potholes",          icon: CircleDot },
+  { value: "Cracks",            label: "Cracks",            icon: Split },
+  { value: "Poor Drainage",     label: "Poor Drainage",     icon: Droplets },
+  { value: "Erosion",           label: "Erosion",           icon: Mountain },
+  { value: "No Major Problems", label: "No Major Problems", icon: CheckCircle },
 ];
 
-const IMPACT_AREA_OPTIONS: CheckOption[] = [
-  { value: "Markets",               label: "Markets",               icon: ShoppingBag },
-  { value: "Health facilities",     label: "Health facilities",     icon: Heart },
-  { value: "Schools",               label: "Schools",               icon: GraduationCap },
-  { value: "Workplaces",            label: "Workplaces",            icon: Briefcase },
-  { value: "No significant impact", label: "No significant impact", icon: CheckCircle },
-];
-
-const STEP_LABELS = ["Location", "Condition", "Road", "Impact", "Feedback"] as const;
+const STEP_LABELS = ["Location", "Condition", "Road & User", "Response & Impact", "NRF & Feedback"] as const;
 
 /* ── SelectField — styled trigger + native select overlay ── */
 function SelectField({
@@ -199,15 +219,15 @@ interface ReportData {
 }
 
 interface SurveyData {
+  roadUserType: string;
   roadRating: string;
-  safetyRating: string;
   roadProblems: string[];
-  maintenanceDone: string;
-  maintSatisfaction: string;
-  maintDelivered: string;
-  impactAreas: string[];
-  transportCost: string;
+  holdingUp: string;
+  responseTime: string;
+  transportImprovement: string;
+  accessImprovement: string;
   nrfAware: string;
+  valueForMoney: string;
   nrfSatisfaction: string;
   feedback: string;
 }
@@ -219,10 +239,9 @@ const INITIAL_REPORT: ReportData = {
 };
 
 const INITIAL_SURVEY: SurveyData = {
-  roadRating: "", safetyRating: "", roadProblems: [],
-  maintenanceDone: "", maintSatisfaction: "", maintDelivered: "",
-  impactAreas: [], transportCost: "",
-  nrfAware: "", nrfSatisfaction: "", feedback: "",
+  roadUserType: "", roadRating: "", roadProblems: [], holdingUp: "",
+  responseTime: "", transportImprovement: "", accessImprovement: "",
+  nrfAware: "", valueForMoney: "", nrfSatisfaction: "", feedback: "",
 };
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -234,8 +253,10 @@ export function ReportForm() {
   const [form, setForm]         = useState<ReportData>(INITIAL_REPORT);
   const [survey, setSurvey]     = useState<SurveyData>(INITIAL_SURVEY);
   const [detecting, setDetect]  = useState(false);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
   const [submitting, setSubmit] = useState(false);
   const [submitted, setDone]    = useState(false);
+  const watchIdRef = useRef<number | null>(null);
 
   type PhotoCheck = { status: "idle" | "checking" | "ok" | "warn"; message: string };
   const [photoPreviewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -265,20 +286,62 @@ export function ReportForm() {
   };
 
   /* ── Geolocation ── */
+  // A cold GPS fix can take several seconds to converge on an accurate reading,
+  // so we watch for updates and keep the best one instead of taking the first.
+  const GPS_TARGET_ACCURACY_M = 30;
+  const GPS_MAX_WAIT_MS       = 15000;
+
+  const stopWatch = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+  };
+
+  useEffect(() => stopWatch, []);
+
   const detectLocation = () => {
     if (!navigator.geolocation) { toast.error("Geolocation is not supported by your browser."); return; }
+    stopWatch();
     setDetect(true);
-    navigator.geolocation.getCurrentPosition(
+    setAccuracy(null);
+
+    let best: GeolocationPosition | null = null;
+
+    const finish = () => {
+      window.clearTimeout(timeoutId);
+      stopWatch();
+      setDetect(false);
+      if (!best) return;
+      update({ latitude: best.coords.latitude, longitude: best.coords.longitude });
+      setAccuracy(best.coords.accuracy);
+      toast.success(
+        best.coords.accuracy <= GPS_TARGET_ACCURACY_M
+          ? "Location detected."
+          : `Location detected (±${Math.round(best.coords.accuracy)}m accuracy). For a more precise fix, move to open sky and try again.`,
+      );
+    };
+
+    const timeoutId = window.setTimeout(finish, GPS_MAX_WAIT_MS);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        update({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        setDetect(false);
-        toast.success("Location detected.");
+        if (!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
+        if (pos.coords.accuracy <= GPS_TARGET_ACCURACY_M) finish();
       },
-      () => {
+      (err) => {
+        if (best) { finish(); return; }
+        window.clearTimeout(timeoutId);
+        stopWatch();
         setDetect(false);
-        toast.error("Could not detect location. Please allow location access and try again.");
+        const messages: Record<number, string> = {
+          1: "Location access was denied. Enable location permission for this site in your browser settings, then try again.",
+          2: "Couldn't determine your location. Make sure GPS/location services are turned on and try again outdoors.",
+          3: "Location is taking too long. Move to an open area with a clear view of the sky and try again.",
+        };
+        toast.error(messages[err.code] ?? "Could not detect location. Please allow location access and try again.");
       },
-      { timeout: 10000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: GPS_MAX_WAIT_MS },
     );
   };
 
@@ -321,13 +384,9 @@ export function ReportForm() {
         form.description.trim().length >= 10 && form.photos.length > 0 &&
         !photoChecks.some((c) => c?.status === "checking" || c?.status === "warn")
       );
-      case 3: return !!survey.roadRating && !!survey.safetyRating;
-      case 4: {
-        if (!survey.maintenanceDone || !survey.transportCost) return false;
-        if (survey.maintenanceDone === "yes" && (!survey.maintSatisfaction || !survey.maintDelivered)) return false;
-        return true;
-      }
-      case 5: return !!survey.nrfAware;
+      case 3: return !!survey.roadUserType && !!survey.roadRating && !!survey.holdingUp;
+      case 4: return !!survey.responseTime && !!survey.transportImprovement && !!survey.accessImprovement;
+      case 5: return !!survey.nrfAware && !!survey.valueForMoney && !!survey.nrfSatisfaction;
       default: return false;
     }
   };
@@ -358,17 +417,17 @@ export function ReportForm() {
         body: JSON.stringify({
           county: form.county, community: form.community,
           reportReference: json.reference_number,
-          roadRating:        Number(survey.roadRating),
-          safetyRating:      Number(survey.safetyRating),
-          roadProblems:      survey.roadProblems,
-          maintenanceDone:   survey.maintenanceDone,
-          maintSatisfaction: survey.maintSatisfaction ? Number(survey.maintSatisfaction) : null,
-          maintDelivered:    survey.maintDelivered || null,
-          impactAreas:       survey.impactAreas,
-          transportCost:     survey.transportCost,
-          nrfAware:          survey.nrfAware,
-          nrfSatisfaction:   survey.nrfSatisfaction ? Number(survey.nrfSatisfaction) : null,
-          feedback:          survey.feedback,
+          roadUserType:         survey.roadUserType,
+          roadRating:           Number(survey.roadRating),
+          roadProblems:         survey.roadProblems,
+          holdingUp:            survey.holdingUp,
+          responseTime:         survey.responseTime,
+          transportImprovement: survey.transportImprovement,
+          accessImprovement:    survey.accessImprovement,
+          nrfAware:             survey.nrfAware,
+          valueForMoney:        Number(survey.valueForMoney),
+          nrfSatisfaction:      Number(survey.nrfSatisfaction),
+          feedback:             survey.feedback,
         }),
       }).catch(() => {});
 
@@ -503,7 +562,12 @@ export function ReportForm() {
                 {detecting ? "Detecting…" : form.latitude !== null ? "Location detected ✓" : "Detect my location"}
               </button>
               {form.latitude !== null
-                ? <p className="text-xs text-muted-foreground">{form.latitude.toFixed(5)}, {form.longitude?.toFixed(5)}</p>
+                ? (
+                  <p className="text-xs text-muted-foreground">
+                    {form.latitude.toFixed(5)}, {form.longitude?.toFixed(5)}
+                    {accuracy !== null && ` · ±${Math.round(accuracy)}m accuracy`}
+                  </p>
+                )
                 : <p className="text-xs text-muted-foreground">GPS is required so your report appears on the road conditions map.</p>
               }
             </div>
@@ -638,72 +702,63 @@ export function ReportForm() {
           </div>
         )}
 
-        {/* ── STEP 3: Road Condition & Safety ── */}
+        {/* ── STEP 3: Road & User ── */}
         {step === 3 && (
           <div className="space-y-5">
             <div className="rounded-md border border-[var(--nrf-blue)]/20 bg-[var(--nrf-blue)]/5 px-4 py-3 text-sm text-[var(--nrf-blue)]">
               A few quick questions about road conditions in <strong>{form.community}, {form.county}</strong>.
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <SelectField
-                id="road-rating" label="Overall road condition" value={survey.roadRating} required
-                onChange={(v) => upSurvey({ roadRating: v })}
-                placeholder="Select rating…"
-                options={RATING_OPTIONS}
-              />
-              <SelectField
-                id="safety-rating" label="Safety on this road" value={survey.safetyRating} required
-                onChange={(v) => upSurvey({ safetyRating: v })}
-                placeholder="Select rating…"
-                options={RATING_OPTIONS}
-              />
-            </div>
+            <SelectField
+              id="road-user-type" label="What type of road user are you?" value={survey.roadUserType} required
+              onChange={(v) => upSurvey({ roadUserType: v })}
+              placeholder="Select…"
+              options={ROAD_USER_OPTIONS}
+            />
+
+            <SelectField
+              id="road-rating" label="How would you rate the current condition of your road?" value={survey.roadRating} required
+              onChange={(v) => upSurvey({ roadRating: v })}
+              placeholder="Select rating…"
+              options={ROAD_CONDITION_OPTIONS}
+            />
 
             <div className="space-y-2">
-              <Label>Road problems observed <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Label>What best describes your road condition? <span className="font-normal text-muted-foreground">(optional)</span></Label>
               <CheckList values={survey.roadProblems} onChange={(v) => upSurvey({ roadProblems: v })} options={ROAD_PROBLEM_OPTIONS} />
             </div>
+
+            <SelectField
+              id="holding-up" label="In your opinion, is the road holding up well after completion?" value={survey.holdingUp} required
+              onChange={(v) => upSurvey({ holdingUp: v })}
+              placeholder="Select…"
+              options={HOLDING_UP_OPTIONS}
+            />
           </div>
         )}
 
-        {/* ── STEP 4: Maintenance & Impact ── */}
+        {/* ── STEP 4: Response & Impact ── */}
         {step === 4 && (
           <div className="space-y-5">
             <SelectField
-              id="maint-done" label="Road maintenance done in the last 12 months?" value={survey.maintenanceDone} required
-              onChange={(v) => upSurvey({ maintenanceDone: v, maintSatisfaction: "", maintDelivered: "" })}
+              id="response-time" label="When potholes or road damages occur, how quickly do authorities respond?" value={survey.responseTime} required
+              onChange={(v) => upSurvey({ responseTime: v })}
               placeholder="Select…"
-              options={MAINT_DONE_OPTIONS}
+              options={RESPONSE_TIME_OPTIONS}
             />
 
-            {survey.maintenanceDone === "yes" && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <SelectField
-                  id="maint-sat" label="Satisfaction with maintenance" value={survey.maintSatisfaction} required
-                  onChange={(v) => upSurvey({ maintSatisfaction: v })}
-                  placeholder="Select rating…"
-                  options={SATISFACTION_OPTIONS}
-                />
-                <SelectField
-                  id="maint-delivered" label="Maintenance matched promises?" value={survey.maintDelivered} required
-                  onChange={(v) => upSurvey({ maintDelivered: v })}
-                  placeholder="Select…"
-                  options={MAINT_DELIVERED_OPTIONS}
-                />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Road condition affected access to: <span className="font-normal text-muted-foreground">(optional)</span></Label>
-              <CheckList values={survey.impactAreas} onChange={(v) => upSurvey({ impactAreas: v })} options={IMPACT_AREA_OPTIONS} />
-            </div>
+            <SelectField
+              id="transport-improvement" label="Has this road improved transportation and movement in your area?" value={survey.transportImprovement} required
+              onChange={(v) => upSurvey({ transportImprovement: v })}
+              placeholder="Select…"
+              options={TRANSPORT_IMPROVEMENT_OPTIONS}
+            />
 
             <SelectField
-              id="transport-cost" label="Effect on transport costs" value={survey.transportCost} required
-              onChange={(v) => upSurvey({ transportCost: v })}
+              id="access-improvement" label="Has the road improved access to markets, schools, hospitals, and businesses?" value={survey.accessImprovement} required
+              onChange={(v) => upSurvey({ accessImprovement: v })}
               placeholder="Select…"
-              options={TRANSPORT_OPTIONS}
+              options={ACCESS_IMPROVEMENT_OPTIONS}
             />
           </div>
         )}
@@ -711,22 +766,26 @@ export function ReportForm() {
         {/* ── STEP 5: NRF & Feedback ── */}
         {step === 5 && (
           <div className="space-y-5">
-            <div className={cn("grid gap-4", survey.nrfAware === "yes" ? "sm:grid-cols-2" : "")}>
-              <SelectField
-                id="nrf-aware" label="Are you aware of the National Road Fund (NRF)?" value={survey.nrfAware} required
-                onChange={(v) => upSurvey({ nrfAware: v, nrfSatisfaction: "" })}
-                placeholder="Select…"
-                options={NRF_AWARE_OPTIONS}
-              />
-              {survey.nrfAware === "yes" && (
-                <SelectField
-                  id="nrf-sat" label="Satisfaction with NRF road interventions" value={survey.nrfSatisfaction}
-                  onChange={(v) => upSurvey({ nrfSatisfaction: v })}
-                  placeholder="Select rating…"
-                  options={SATISFACTION_OPTIONS}
-                />
-              )}
-            </div>
+            <SelectField
+              id="nrf-aware" label="Are you aware that road maintenance is funded through fuel levy collections managed by the National Road Fund?" value={survey.nrfAware} required
+              onChange={(v) => upSurvey({ nrfAware: v })}
+              placeholder="Select…"
+              options={NRF_AWARE_OPTIONS}
+            />
+
+            <SelectField
+              id="value-for-money" label="Do you believe citizens are receiving value for money from road projects funded through the fuel levy?" value={survey.valueForMoney} required
+              onChange={(v) => upSurvey({ valueForMoney: v })}
+              placeholder="Select…"
+              options={AGREEMENT_OPTIONS}
+            />
+
+            <SelectField
+              id="nrf-sat" label="Overall, how satisfied are you with roads funded by the National Road Fund?" value={survey.nrfSatisfaction} required
+              onChange={(v) => upSurvey({ nrfSatisfaction: v })}
+              placeholder="Select rating…"
+              options={SATISFACTION_OPTIONS}
+            />
 
             <div className="space-y-1.5">
               <Label htmlFor="feedback">
@@ -752,7 +811,13 @@ export function ReportForm() {
         )}
 
         {step < 5 ? (
-          <button type="button" disabled={!canGoNext()} onClick={() => setStep((s) => (s + 1) as Step)}
+          <button type="button" disabled={!canGoNext()} onClick={() => {
+            if (step === 2 && survey.roadProblems.length === 0) {
+              const mapped = CONDITION_TO_PROBLEM[form.conditionType];
+              if (mapped) upSurvey({ roadProblems: [mapped] });
+            }
+            setStep((s) => (s + 1) as Step);
+          }}
             className="btn btn-secondary disabled:opacity-40">
             Continue <ChevronRight className="size-4" />
           </button>

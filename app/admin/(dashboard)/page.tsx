@@ -65,7 +65,7 @@ async function getStatCounts() {
 async function getSurveyInsights() {
   const { data } = await supabase
     .from("citizen_surveys")
-    .select("road_rating, safety_rating, nrf_aware, nrf_satisfaction");
+    .select("road_rating, nrf_aware, nrf_satisfaction");
   if (!data || data.length === 0) return null;
   const avg = (arr: (number | null)[]) => {
     const vals = arr.filter((v): v is number => v !== null);
@@ -75,7 +75,6 @@ async function getSurveyInsights() {
   return {
     total:      data.length,
     avgRoad:    avg(data.map((r) => r.road_rating)),
-    avgSafety:  avg(data.map((r) => r.safety_rating)),
     avgNrf:     avg(data.map((r) => r.nrf_satisfaction)),
     nrfAwarePct,
   };
@@ -167,10 +166,10 @@ export default async function AdminDashboardPage() {
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             {[
-              { label: "Survey Responses", value: String(survey.total),                           icon: ClipboardList, color: "text-[var(--nrf-blue)]",  bg: "bg-[var(--nrf-blue)]/10", raw: true },
-              { label: "Avg Road Rating",  value: survey.avgRoad  ? `${survey.avgRoad}/5`  : "—", icon: Star,          color: "text-amber-600",           bg: "bg-amber-50",             raw: true },
-              { label: "Avg Safety",       value: survey.avgSafety ? `${survey.avgSafety}/5` : "—", icon: ThumbsUp,    color: "text-green-600",           bg: "bg-green-50",             raw: true },
-              { label: "NRF Awareness",    value: `${survey.nrfAwarePct}%`,                       icon: TrendingUp,    color: "text-purple-600",          bg: "bg-purple-50",            raw: true },
+              { label: "Survey Responses",     value: String(survey.total),                       icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10", raw: true },
+              { label: "Avg Road Rating",      value: survey.avgRoad ? `${survey.avgRoad}/5` : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50",             raw: true },
+              { label: "Avg NRF Satisfaction", value: survey.avgNrf  ? `${survey.avgNrf}/5`  : "—", icon: ThumbsUp,      color: "text-green-600",          bg: "bg-green-50",             raw: true },
+              { label: "NRF Awareness",        value: `${survey.nrfAwarePct}%`,                    icon: TrendingUp,    color: "text-purple-600",         bg: "bg-purple-50",            raw: true },
             ].map(({ label, value, icon: Icon, color, bg }) => (
               <div key={label} className="rounded-xl border border-border bg-white p-4 shadow-sm md:p-5">
                 <div className={cn("flex size-8 items-center justify-center rounded-lg md:size-9", bg)}>

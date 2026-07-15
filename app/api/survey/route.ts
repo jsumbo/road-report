@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { LIBERIA_COUNTIES } from "@/lib/counties";
 
-const MAINT_VALUES = ["yes", "no", "unsure"];
-const COST_VALUES  = ["increased", "same", "decreased"];
+const ROAD_USER_VALUES     = ["driver", "pedestrian", "public_transport", "trader"];
+const HOLDING_UP_VALUES    = ["yes", "somewhat", "no"];
+const RESPONSE_TIME_VALUES = ["within_1m", "within_3m", "within_6m", "over_6m", "no_response"];
+const IMPROVEMENT_VALUES   = ["significantly", "somewhat", "no_change", "worse"];
+const ACCESS_VALUES        = ["significantly", "somewhat", "no_change", "not_at_all"];
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,16 +16,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid county" }, { status: 400 });
     if (!b.community?.trim())
       return NextResponse.json({ error: "Community is required" }, { status: 400 });
+    if (!ROAD_USER_VALUES.includes(b.roadUserType))
+      return NextResponse.json({ error: "Road user type required" }, { status: 400 });
     if (!b.roadRating || b.roadRating < 1 || b.roadRating > 5)
       return NextResponse.json({ error: "Road rating required (1–5)" }, { status: 400 });
-    if (!b.safetyRating || b.safetyRating < 1 || b.safetyRating > 5)
-      return NextResponse.json({ error: "Safety rating required (1–5)" }, { status: 400 });
-    if (!MAINT_VALUES.includes(b.maintenanceDone))
-      return NextResponse.json({ error: "Maintenance field required" }, { status: 400 });
-    if (!COST_VALUES.includes(b.transportCost))
-      return NextResponse.json({ error: "Transport cost field required" }, { status: 400 });
+    if (!HOLDING_UP_VALUES.includes(b.holdingUp))
+      return NextResponse.json({ error: "Holding up field required" }, { status: 400 });
+    if (!RESPONSE_TIME_VALUES.includes(b.responseTime))
+      return NextResponse.json({ error: "Response time field required" }, { status: 400 });
+    if (!IMPROVEMENT_VALUES.includes(b.transportImprovement))
+      return NextResponse.json({ error: "Transport improvement field required" }, { status: 400 });
+    if (!ACCESS_VALUES.includes(b.accessImprovement))
+      return NextResponse.json({ error: "Access improvement field required" }, { status: 400 });
     if (b.nrfAware !== "yes" && b.nrfAware !== "no")
       return NextResponse.json({ error: "NRF awareness field required" }, { status: 400 });
+    if (!b.valueForMoney || b.valueForMoney < 1 || b.valueForMoney > 5)
+      return NextResponse.json({ error: "Value for money rating required (1–5)" }, { status: 400 });
+    if (!b.nrfSatisfaction || b.nrfSatisfaction < 1 || b.nrfSatisfaction > 5)
+      return NextResponse.json({ error: "NRF satisfaction rating required (1–5)" }, { status: 400 });
 
     const reportReference = typeof b.reportReference === "string" && b.reportReference.trim()
       ? b.reportReference.trim()
@@ -31,21 +42,21 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from("citizen_surveys")
       .insert({
-        reference_number:   "PENDING",
-        report_reference:   reportReference,
-        county:             b.county,
-        community:          b.community.trim(),
-        road_rating:        b.roadRating,
-        safety_rating:      b.safetyRating,
-        road_problems:      Array.isArray(b.roadProblems) ? b.roadProblems : [],
-        maintenance_done:   b.maintenanceDone,
-        maint_satisfaction: b.maintenanceDone === "yes" ? (b.maintSatisfaction ?? null) : null,
-        maint_delivered:    b.maintenanceDone === "yes" ? (b.maintDelivered  || null)   : null,
-        impact_areas:       Array.isArray(b.impactAreas) ? b.impactAreas : [],
-        transport_cost:     b.transportCost,
-        nrf_aware:          b.nrfAware === "yes",
-        nrf_satisfaction:   b.nrfAware === "yes" ? (b.nrfSatisfaction ?? null) : null,
-        feedback:           b.feedback?.trim() || null,
+        reference_number:      "PENDING",
+        report_reference:      reportReference,
+        county:                b.county,
+        community:             b.community.trim(),
+        road_user_type:        b.roadUserType,
+        road_rating:           b.roadRating,
+        road_problems:         Array.isArray(b.roadProblems) ? b.roadProblems : [],
+        holding_up:            b.holdingUp,
+        response_time:         b.responseTime,
+        transport_improvement: b.transportImprovement,
+        access_improvement:    b.accessImprovement,
+        nrf_aware:             b.nrfAware === "yes",
+        value_for_money:       b.valueForMoney,
+        nrf_satisfaction:      b.nrfSatisfaction,
+        feedback:              b.feedback?.trim() || null,
       })
       .select("id")
       .single();

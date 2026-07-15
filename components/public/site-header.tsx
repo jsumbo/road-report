@@ -15,7 +15,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 bg-[var(--nrf-off-white)] px-4 pt-3 md:px-8">
+    <header className="sticky top-0 z-50 bg-transparent px-4 pt-3 md:px-8">
       {/* Floating pill */}
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--nrf-ink)]/95 px-4 shadow-md backdrop-blur-md md:px-6">
         <NrfLogo variant="mark" href="/" className="lg:hidden" priority />
