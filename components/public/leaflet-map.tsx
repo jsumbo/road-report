@@ -5,10 +5,32 @@ import {
   MapContainer, TileLayer, Marker, Popup, Pane, Polygon,
   LayersControl, GeoJSON, useMap,
 } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
 import type { MapReport } from "@/app/(public)/map/page";
 import { CONDITION_LABELS, SEVERITY_LABELS } from "@/lib/types";
+
+/* ── Cluster bubble icon — matches brand colours instead of the plugin default ── */
+function createClusterIcon(cluster: L.MarkerCluster) {
+  const count = cluster.getChildCount();
+  const size = count < 10 ? 36 : count < 50 ? 44 : 52;
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="
+        display:flex;align-items:center;justify-content:center;
+        width:${size}px;height:${size}px;border-radius:50%;
+        background:#333e8d;border:3px solid #fff;
+        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+        color:#fff;font-weight:700;font-family:inherit;
+        font-size:${count < 100 ? 13 : 12}px;
+      ">${count}</div>`,
+    iconSize: [size, size],
+  });
+}
 
 const { BaseLayer } = LayersControl;
 
@@ -193,7 +215,7 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
   const [mask,    setMask]    = useState<[number, number][][] | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [outline, setOutline] = useState<any>(null);
-  const [activeLayer,  setActiveLayer]  = useState("Light");
+  const [activeLayer,  setActiveLayer]  = useState("Street");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -294,10 +316,10 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
 
       {/* ── Base tile layers ── */}
       <LayersControl position="topright">
-        <BaseLayer name="Street">
+        <BaseLayer checked name="Street">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" maxZoom={19} />
         </BaseLayer>
-        <BaseLayer checked name="Light">
+        <BaseLayer name="Light">
           <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" maxZoom={19} />
         </BaseLayer>
         <BaseLayer name="Dark">
@@ -353,11 +375,16 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         countyCounts={countyCounts}
       />
 
-      {/* ── Report markers ── */}
+      {/* ── Report markers — clustered when overlapping/nearby ── */}
+      <MarkerClusterGroup
+        iconCreateFunction={createClusterIcon}
+        maxClusterRadius={60}
+        spiderfyOnMaxZoom
+        showCoverageOnHover={false}
+      >
       {reports.map((report) => (
         <Marker
           key={report.id}
-          pane="reports-pane"
           position={[report.latitude, report.longitude]}
           icon={pinIcon(report.severity, report.cover_photo_url)}
         >
@@ -410,6 +437,7 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
           </Popup>
         </Marker>
       ))}
+      </MarkerClusterGroup>
     </MapContainer>
     </div>
   );
