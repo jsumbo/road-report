@@ -11,7 +11,8 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { LIBERIA_COUNTIES } from "@/lib/counties";
+import { LIBERIA_COUNTIES, type LiberiaCounty } from "@/lib/counties";
+import { countyAt, OUTSIDE_LIBERIA_MESSAGE } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { ConditionType, ReportSeverity } from "@/lib/types";
 import { SelectField, StepIndicator, type SelectOption } from "@/components/form/fields";
@@ -69,6 +70,7 @@ export function ReportForm() {
   const [form, setForm]         = useState<ReportData>(INITIAL_REPORT);
   const [detecting, setDetect]  = useState(false);
   const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [gpsCounty, setGpsCounty] = useState<LiberiaCounty | null>(null);
   const [submitting, setSubmit] = useState(false);
   const [reference, setRef]     = useState<string | null>(null);
   const [surveyPrompt, setSurveyPrompt] = useState<SurveyPrompt>("offered");
@@ -128,7 +130,18 @@ export function ReportForm() {
       stopWatch();
       setDetect(false);
       if (!best) return;
-      update({ latitude: best.coords.latitude, longitude: best.coords.longitude });
+      const { latitude, longitude } = best.coords;
+      const detected = countyAt(latitude, longitude);
+      if (!detected) {
+        update({ latitude: null, longitude: null });
+        setGpsCounty(null);
+        setAccuracy(null);
+        toast.error(OUTSIDE_LIBERIA_MESSAGE);
+        return;
+      }
+      // Fill the county from GPS when the reporter hasn't picked one yet
+      setForm((p) => ({ ...p, latitude, longitude, county: p.county || detected }));
+      setGpsCounty(detected);
       setAccuracy(best.coords.accuracy);
       toast.success(
         best.coords.accuracy <= GPS_TARGET_ACCURACY_M
@@ -240,6 +253,7 @@ export function ReportForm() {
     setPreviewUrls([]);
     setPhotoChecks([]);
     setRef(null);
+    setGpsCounty(null);
     setSurveyPrompt("offered");
     setStep(1);
   };
@@ -370,6 +384,18 @@ export function ReportForm() {
                 )
                 : <p className="text-xs text-muted-foreground">GPS is required so your report appears on the road conditions map.</p>
               }
+              {gpsCounty && form.county && gpsCounty !== form.county && (
+                <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    Your GPS puts you in {gpsCounty}, but you selected {form.county}.
+                  </span>
+                  <button type="button" onClick={() => update({ county: gpsCounty })}
+                    className="shrink-0 self-start text-xs font-semibold underline underline-offset-2 sm:self-auto">
+                    Use {gpsCounty}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

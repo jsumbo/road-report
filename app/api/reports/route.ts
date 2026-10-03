@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase, REPORTS_BUCKET } from "@/lib/supabase";
 import { LIBERIA_COUNTIES } from "@/lib/counties";
+import { countyAt, OUTSIDE_LIBERIA_MESSAGE } from "@/lib/geo";
 import type { ConditionType, ReportSeverity } from "@/lib/types";
 
 const CONDITION_TYPES: ConditionType[] = [
@@ -38,6 +39,9 @@ export async function POST(req: NextRequest) {
     }
     if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
       return NextResponse.json({ error: "GPS coordinates are required" }, { status: 400 });
+    }
+    if (!countyAt(lat, lng)) {
+      return NextResponse.json({ error: OUTSIDE_LIBERIA_MESSAGE }, { status: 400 });
     }
     if (!CONDITION_TYPES.includes(conditionType as ConditionType)) {
       return NextResponse.json({ error: "Invalid condition type" }, { status: 400 });
