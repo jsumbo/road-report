@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   MapPin, Calendar, AlertTriangle, Clock, CheckCircle,
-  FileText, ShieldAlert, ArrowRight, ClipboardList, Star, ThumbsUp, TrendingUp,
+  FileText, ShieldAlert, ArrowRight, ClipboardList, ThumbsUp, TrendingUp,
 } from "lucide-react";
 import {
   ReportsTimelineChart, StatusDonutChart, CountyBarChart,
@@ -65,7 +65,7 @@ async function getStatCounts() {
 async function getSurveyInsights() {
   const { data } = await supabase
     .from("citizen_surveys")
-    .select("road_rating, nrf_aware, nrf_satisfaction");
+    .select("access_improvement, nrf_aware, nrf_satisfaction");
   if (!data || data.length === 0) return null;
   const avg = (arr: (number | null)[]) => {
     const vals = arr.filter((v): v is number => v !== null);
@@ -74,7 +74,7 @@ async function getSurveyInsights() {
   const nrfAwarePct = Math.round((data.filter((r) => r.nrf_aware).length / data.length) * 100);
   return {
     total:      data.length,
-    avgRoad:    avg(data.map((r) => r.road_rating)),
+    accessImprovedPct: Math.round((data.filter((r) => r.access_improvement === "significantly" || r.access_improvement === "somewhat").length / data.length) * 100),
     avgNrf:     avg(data.map((r) => r.nrf_satisfaction)),
     nrfAwarePct,
   };
@@ -167,7 +167,7 @@ export default async function AdminDashboardPage() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
             {[
               { label: "Survey Responses",     value: String(survey.total),                       icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10", raw: true },
-              { label: "Avg Road Rating",      value: survey.avgRoad ? `${survey.avgRoad}/5` : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50",             raw: true },
+              { label: "Access Improved",      value: `${survey.accessImprovedPct}%`,              icon: TrendingUp,          color: "text-amber-600",          bg: "bg-amber-50",             raw: true },
               { label: "Avg NRF Satisfaction", value: survey.avgNrf  ? `${survey.avgNrf}/5`  : "—", icon: ThumbsUp,      color: "text-green-600",          bg: "bg-green-50",             raw: true },
               { label: "NRF Awareness",        value: `${survey.nrfAwarePct}%`,                    icon: TrendingUp,    color: "text-purple-600",         bg: "bg-purple-50",            raw: true },
             ].map(({ label, value, icon: Icon, color, bg }) => (

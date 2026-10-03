@@ -7,10 +7,7 @@ import {
   ShieldCheck, TrendingUp, Wrench, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  QualityBarChart, IssueFrequencyChart,
-  type QualityPoint, type IssuePoint,
-} from "@/components/admin/dashboard-charts";
+import { QualityBarChart, type QualityPoint } from "@/components/admin/dashboard-charts";
 
 export const metadata = { title: "Survey Responses" };
 
@@ -21,6 +18,12 @@ const ROAD_USER_LABELS: Record<string, string> = {
 const RESPONSE_TIME_LABELS: Record<string, string> = {
   within_1m: "≤ 1 Month", within_3m: "≤ 3 Months", within_6m: "≤ 6 Months",
   over_6m: "> 6 Months", no_response: "No Response",
+};
+const TRANSPORT_LABELS: Record<string, string> = {
+  significantly: "Significantly", somewhat: "Somewhat", no_change: "No Change", worse: "Worse",
+};
+const ACCESS_LABELS: Record<string, string> = {
+  significantly: "Significantly", somewhat: "Somewhat", no_change: "No Change", not_at_all: "Not at All",
 };
 const HOLDING_UP_LABELS: Record<string, string> = {
   yes: "Yes", somewhat: "Somewhat", no: "No",
@@ -52,12 +55,12 @@ async function getSurveys() {
 async function getAverages() {
   const { data } = await supabase
     .from("citizen_surveys")
-    .select("road_rating, nrf_satisfaction, value_for_money, nrf_aware, holding_up, response_time, transport_improvement");
+    .select("nrf_satisfaction, value_for_money, nrf_aware, holding_up, response_time, transport_improvement, access_improvement");
 
   if (!data || data.length === 0) {
     return {
-      total: 0, road: null, nrf: null, valueForMoney: null,
-      nrfAwarePct: 0, holdingUpPct: 0, quickResponsePct: 0, transportImprovedPct: 0,
+      total: 0, nrf: null, valueForMoney: null,
+      nrfAwarePct: 0, holdingUpPct: 0, quickResponsePct: 0, transportImprovedPct: 0, accessImprovedPct: 0,
     };
   }
 
@@ -68,40 +71,27 @@ async function getAverages() {
 
   return {
     total:                data.length,
-    road:                 avg(data.map((r) => r.road_rating)),
     nrf:                  avg(data.map((r) => r.nrf_satisfaction)),
     valueForMoney:        avg(data.map((r) => r.value_for_money)),
     nrfAwarePct:          Math.round((data.filter((r) => r.nrf_aware).length / data.length) * 100),
     holdingUpPct:         Math.round((data.filter((r) => r.holding_up === "yes").length / data.length) * 100),
     quickResponsePct:     Math.round((data.filter((r) => r.response_time === "within_1m" || r.response_time === "within_3m").length / data.length) * 100),
     transportImprovedPct: Math.round((data.filter((r) => r.transport_improvement === "significantly" || r.transport_improvement === "somewhat").length / data.length) * 100),
+    accessImprovedPct:    Math.round((data.filter((r) => r.access_improvement === "significantly" || r.access_improvement === "somewhat").length / data.length) * 100),
   };
 }
 
 export default async function SurveysPage() {
   const [surveys, avgs] = await Promise.all([getSurveys(), getAverages()]);
 
-  const qualityDist: QualityPoint[] = [
-    { label: "Very Good", count: surveys.filter((r) => r.road_rating === 5).length },
-    { label: "Good",      count: surveys.filter((r) => r.road_rating === 4).length },
-    { label: "Average",   count: surveys.filter((r) => r.road_rating === 3).length },
-    { label: "Poor",      count: surveys.filter((r) => r.road_rating === 2).length },
-    { label: "Very Poor", count: surveys.filter((r) => r.road_rating === 1).length },
-  ];
-
-  const issueCounts: Record<string, number> = {};
-  for (const s of surveys) {
-    for (const p of (s.road_problems ?? [])) {
-      issueCounts[p] = (issueCounts[p] ?? 0) + 1;
-    }
-  }
-  const issueFreq: IssuePoint[] = Object.entries(issueCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([issue, count]) => ({ issue, count }));
+  const distribution = (labels: Record<string, string>, key: "transport_improvement" | "access_improvement"): QualityPoint[] =>
+    Object.entries(labels).map(([value, label]) => ({ label, count: surveys.filter((r) => r[key] === value).length }));
+  const transportDist = distribution(TRANSPORT_LABELS, "transport_improvement");
+  const accessDist    = distribution(ACCESS_LABELS, "access_improvement");
 
   const kpis = [
     { label: "Responses",             value: String(avgs.total),                                icon: ClipboardList, color: "text-[var(--nrf-blue)]", bg: "bg-[var(--nrf-blue)]/10" },
-    { label: "Avg Road Rating",       value: avgs.road          ? `${avgs.road}/5`          : "—", icon: Star,          color: "text-amber-600",          bg: "bg-amber-50" },
+    { label: "Access Improved",       value: `${avgs.accessImprovedPct}%`,                        icon: Users,         color: "text-amber-600",          bg: "bg-amber-50" },
     { label: "Avg NRF Satisfaction",  value: avgs.nrf           ? `${avgs.nrf}/5`           : "—", icon: ShieldCheck,   color: "text-green-600",          bg: "bg-green-50" },
     { label: "Avg Value for Money",   value: avgs.valueForMoney ? `${avgs.valueForMoney}/5` : "—", icon: Star,          color: "text-purple-600",         bg: "bg-purple-50" },
     { label: "NRF Awareness",         value: `${avgs.nrfAwarePct}%`,                              icon: TrendingUp,    color: "text-purple-600",         bg: "bg-purple-50" },
@@ -118,7 +108,7 @@ export default async function SurveysPage() {
           Survey Responses
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Citizen feedback on road conditions, maintenance, and NRF performance.
+          Citizen feedback on how roads affect daily life, access to services, and NRF performance.
         </p>
       </div>
 
@@ -139,14 +129,14 @@ export default async function SurveysPage() {
       {surveys.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-xl border border-border bg-white p-5 shadow-sm md:p-6">
-            <p className="mb-1 text-sm font-semibold">Count vs. Quality</p>
-            <p className="mb-4 text-xs text-muted-foreground">Road quality ratings from citizens</p>
-            <QualityBarChart data={qualityDist} />
+            <p className="mb-1 text-sm font-semibold">Transport &amp; Movement</p>
+            <p className="mb-4 text-xs text-muted-foreground">Has the road improved transportation in the area?</p>
+            <QualityBarChart data={transportDist} />
           </div>
           <div className="rounded-xl border border-border bg-white p-5 shadow-sm md:p-6">
-            <p className="mb-1 text-sm font-semibold">Frequency vs. Issue</p>
-            <p className="mb-4 text-xs text-muted-foreground">Most commonly reported road problems</p>
-            <IssueFrequencyChart data={issueFreq} />
+            <p className="mb-1 text-sm font-semibold">Access to Services</p>
+            <p className="mb-4 text-xs text-muted-foreground">Access to markets, schools, hospitals, and businesses</p>
+            <QualityBarChart data={accessDist} />
           </div>
         </div>
       )}
@@ -164,7 +154,7 @@ export default async function SurveysPage() {
                 <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
                   <th className="px-4 py-3 text-left">Reference</th>
                   <th className="px-4 py-3 text-left">Location</th>
-                  <th className="px-4 py-3 text-left">Road</th>
+                  <th className="px-4 py-3 text-left">Access</th>
                   <th className="hidden px-4 py-3 text-left md:table-cell">User Type</th>
                   <th className="hidden px-4 py-3 text-left md:table-cell">Response Time</th>
                   <th className="hidden px-4 py-3 text-left lg:table-cell">NRF Sat.</th>
@@ -184,7 +174,7 @@ export default async function SurveysPage() {
                         <span className="max-w-[130px] truncate">{s.community}, {s.county}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3"><RatingBadge value={s.road_rating} /></td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">{ACCESS_LABELS[s.access_improvement] ?? "—"}</td>
                     <td className="hidden px-4 py-3 md:table-cell">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Users className="size-3 shrink-0" />
@@ -206,7 +196,7 @@ export default async function SurveysPage() {
                           {s.report_reference}
                         </Link>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">Standalone</span>
                       )}
                     </td>
                     <td className="hidden px-4 py-3 xl:table-cell whitespace-nowrap text-xs text-muted-foreground">

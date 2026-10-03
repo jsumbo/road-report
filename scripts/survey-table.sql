@@ -18,9 +18,9 @@ create table if not exists citizen_surveys (
 
 -- Q1: road user type
 alter table citizen_surveys add column if not exists road_user_type text;
--- Q2: overall road condition rating (5 = Very Good ... 1 = Very Poor)
+-- Retired: road condition rating — road conditions are captured by reports, not the survey (kept for historical rows)
 alter table citizen_surveys add column if not exists road_rating int;
--- Q3: road problems observed
+-- Retired: road problems observed (kept for historical rows)
 alter table citizen_surveys add column if not exists road_problems text[] not null default '{}';
 -- Q4: is the road holding up well after completion?
 alter table citizen_surveys add column if not exists holding_up text;
@@ -49,7 +49,7 @@ alter table citizen_surveys drop column if exists transport_cost;
 
 -- Constraints (added after backfill-safe column creation above)
 alter table citizen_surveys alter column road_user_type set not null;
-alter table citizen_surveys alter column road_rating set not null;
+alter table citizen_surveys alter column road_rating drop not null;
 alter table citizen_surveys alter column holding_up set not null;
 alter table citizen_surveys alter column response_time set not null;
 alter table citizen_surveys alter column transport_improvement set not null;

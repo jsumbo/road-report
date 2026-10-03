@@ -76,8 +76,8 @@ export default async function HomePage() {
               Report a Road Condition
               <ArrowRight className="size-4" />
             </Link>
-            <Link href="/reports" className="btn btn-ghost-white btn-lg">
-              View All Reports
+            <Link href="/survey" className="btn btn-ghost-white btn-lg">
+              Take the Citizen Survey
             </Link>
           </div>
         </div>

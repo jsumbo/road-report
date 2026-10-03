@@ -18,8 +18,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Community is required" }, { status: 400 });
     if (!ROAD_USER_VALUES.includes(b.roadUserType))
       return NextResponse.json({ error: "Road user type required" }, { status: 400 });
-    if (!b.roadRating || b.roadRating < 1 || b.roadRating > 5)
-      return NextResponse.json({ error: "Road rating required (1–5)" }, { status: 400 });
     if (!HOLDING_UP_VALUES.includes(b.holdingUp))
       return NextResponse.json({ error: "Holding up field required" }, { status: 400 });
     if (!RESPONSE_TIME_VALUES.includes(b.responseTime))
@@ -47,8 +45,6 @@ export async function POST(req: NextRequest) {
         county:                b.county,
         community:             b.community.trim(),
         road_user_type:        b.roadUserType,
-        road_rating:           b.roadRating,
-        road_problems:         Array.isArray(b.roadProblems) ? b.roadProblems : [],
         holding_up:            b.holdingUp,
         response_time:         b.responseTime,
         transport_improvement: b.transportImprovement,

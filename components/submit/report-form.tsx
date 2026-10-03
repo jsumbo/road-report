@@ -2,11 +2,11 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import {
-  CheckCircle, ChevronRight, ChevronLeft, ChevronDown, Loader2, MapPin, Upload, X,
+  CheckCircle, ChevronRight, ChevronLeft, Loader2, MapPin, Upload, X, ClipboardList,
   CircleDot, Waves, Milestone, Mountain, ShieldOff, AlertTriangle, Wrench, HelpCircle,
-  AlertCircle, XCircle, Star, TrendingUp, Minus, TrendingDown, Building2,
-  Droplets, Car, PersonStanding, Bus, Store, Split, Clock,
+  AlertCircle, XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,18 +14,8 @@ import { Label } from "@/components/ui/label";
 import { LIBERIA_COUNTIES } from "@/lib/counties";
 import { cn } from "@/lib/utils";
 import type { ConditionType, ReportSeverity } from "@/lib/types";
-
-/* ── Shared option type ── */
-interface SelectOption {
-  value: string;
-  label: string;
-  icon?: React.ElementType;
-}
-interface CheckOption {
-  value: string;
-  label: string;
-  icon: React.ElementType;
-}
+import { SelectField, StepIndicator, type SelectOption } from "@/components/form/fields";
+import { SurveyForm } from "@/components/survey/survey-form";
 
 /* ── Option definitions ── */
 
@@ -47,162 +37,7 @@ const SEVERITY_OPTIONS: (SelectOption & { desc: string; banner: string })[] = [
   { value: "critical", label: "Critical", desc: "Impassable or life-threatening",      icon: XCircle,      banner: "border-red-200 bg-red-50 text-red-800" },
 ];
 
-const ROAD_USER_OPTIONS: SelectOption[] = [
-  { value: "driver",           label: "Driver (Motorcyclist / Kehkeh Rider / Cyclist)",        icon: Car },
-  { value: "pedestrian",       label: "Pedestrian (children, elderly, vulnerable people)",      icon: PersonStanding },
-  { value: "public_transport", label: "Public Transport / Commercial / Heavy Duty Driver",      icon: Bus },
-  { value: "trader",           label: "Trader",                                                icon: Store },
-];
-
-const ROAD_CONDITION_OPTIONS: SelectOption[] = [
-  { value: "5", label: "Very Good", icon: Star },
-  { value: "4", label: "Good",      icon: Star },
-  { value: "3", label: "Fair",      icon: Star },
-  { value: "2", label: "Poor",      icon: Star },
-  { value: "1", label: "Very Poor", icon: Star },
-];
-
-const HOLDING_UP_OPTIONS: SelectOption[] = [
-  { value: "yes",      label: "Yes",      icon: CheckCircle },
-  { value: "somewhat", label: "Somewhat", icon: AlertCircle },
-  { value: "no",       label: "No",       icon: XCircle },
-];
-
-const RESPONSE_TIME_OPTIONS: SelectOption[] = [
-  { value: "within_1m",   label: "Within 1 Month",     icon: Clock },
-  { value: "within_3m",   label: "Within 3 Months",    icon: Clock },
-  { value: "within_6m",   label: "Within 6 Months",    icon: Clock },
-  { value: "over_6m",     label: "More than 6 Months", icon: Clock },
-  { value: "no_response", label: "No Response",        icon: XCircle },
-];
-
-const TRANSPORT_IMPROVEMENT_OPTIONS: SelectOption[] = [
-  { value: "significantly", label: "Significantly",     icon: TrendingUp },
-  { value: "somewhat",      label: "Somewhat",          icon: TrendingUp },
-  { value: "no_change",     label: "No Change",         icon: Minus },
-  { value: "worse",         label: "Made Things Worse", icon: TrendingDown },
-];
-
-const ACCESS_IMPROVEMENT_OPTIONS: SelectOption[] = [
-  { value: "significantly", label: "Significantly", icon: TrendingUp },
-  { value: "somewhat",      label: "Somewhat",      icon: TrendingUp },
-  { value: "no_change",     label: "No Change",     icon: Minus },
-  { value: "not_at_all",    label: "Not at All",    icon: TrendingDown },
-];
-
-const AGREEMENT_OPTIONS: SelectOption[] = [
-  { value: "5", label: "Strongly Agree",    icon: Star },
-  { value: "4", label: "Agree",             icon: Star },
-  { value: "3", label: "Neutral",           icon: Star },
-  { value: "2", label: "Disagree",          icon: Star },
-  { value: "1", label: "Strongly Disagree", icon: Star },
-];
-
-const SATISFACTION_OPTIONS: SelectOption[] = [
-  { value: "1", label: "1 — Very Dissatisfied", icon: Star },
-  { value: "2", label: "2 — Dissatisfied",      icon: Star },
-  { value: "3", label: "3 — Neutral",           icon: Star },
-  { value: "4", label: "4 — Satisfied",         icon: Star },
-  { value: "5", label: "5 — Very Satisfied",    icon: Star },
-];
-
-const NRF_AWARE_OPTIONS: SelectOption[] = [
-  { value: "yes", label: "Yes", icon: Building2 },
-  { value: "no",  label: "No",  icon: HelpCircle },
-];
-
-const CONDITION_TO_PROBLEM: Partial<Record<string, string>> = {
-  pothole:         "Potholes",
-  road_erosion:    "Erosion",
-  damaged_culvert: "Poor Drainage",
-};
-
-const ROAD_PROBLEM_OPTIONS: CheckOption[] = [
-  { value: "Potholes",          label: "Potholes",          icon: CircleDot },
-  { value: "Cracks",            label: "Cracks",            icon: Split },
-  { value: "Poor Drainage",     label: "Poor Drainage",     icon: Droplets },
-  { value: "Erosion",           label: "Erosion",           icon: Mountain },
-  { value: "No Major Problems", label: "No Major Problems", icon: CheckCircle },
-];
-
-const STEP_LABELS = ["Location", "Condition", "Road & User", "Response & Impact", "NRF & Feedback"] as const;
-
-/* ── SelectField — styled trigger + native select overlay ── */
-function SelectField({
-  id, label, value, onChange, options, placeholder, required,
-}: {
-  id: string;
-  label?: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: SelectOption[];
-  placeholder: string;
-  required?: boolean;
-}) {
-  const selected = options.find((o) => o.value === value);
-  const Icon = selected?.icon;
-  return (
-    <div className="space-y-1.5">
-      {label && (
-        <Label htmlFor={id}>
-          {label}{required && " *"}
-        </Label>
-      )}
-      <div className="relative rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
-        <div className={cn(
-          "flex h-11 cursor-pointer select-none items-center gap-2.5 px-3 py-2 text-sm pointer-events-none",
-          !value && "text-muted-foreground",
-        )}>
-          {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
-          <span className="flex-1 truncate">{selected?.label ?? placeholder}</span>
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground/60" />
-        </div>
-        <select
-          id={id}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="absolute inset-0 h-full w-full cursor-pointer rounded-md opacity-0"
-        >
-          <option value="" disabled>{placeholder}</option>
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
-    </div>
-  );
-}
-
-/* ── CheckList — checkboxes with icon, highlights when checked ── */
-function CheckList({ options, values, onChange }: {
-  options: CheckOption[];
-  values: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const toggle = (v: string) =>
-    onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
-  return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {options.map(({ value: opt, label, icon: Icon }) => (
-        <label key={opt} className={cn(
-          "flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2.5 text-sm transition-colors",
-          values.includes(opt)
-            ? "border-[var(--nrf-blue)]/50 bg-[var(--nrf-blue)]/5 text-[var(--nrf-blue)]"
-            : "border-border hover:bg-muted/30",
-        )}>
-          <input
-            type="checkbox"
-            className="size-4 shrink-0 accent-[var(--nrf-blue)]"
-            checked={values.includes(opt)}
-            onChange={() => toggle(opt)}
-          />
-          <Icon className={cn("size-4 shrink-0", values.includes(opt) ? "text-[var(--nrf-blue)]" : "text-muted-foreground")} />
-          {label}
-        </label>
-      ))}
-    </div>
-  );
-}
+const STEP_LABELS = ["Location", "Condition"] as const;
 
 /* ── Types ── */
 
@@ -218,44 +53,25 @@ interface ReportData {
   photos: File[];
 }
 
-interface SurveyData {
-  roadUserType: string;
-  roadRating: string;
-  roadProblems: string[];
-  holdingUp: string;
-  responseTime: string;
-  transportImprovement: string;
-  accessImprovement: string;
-  nrfAware: string;
-  valueForMoney: string;
-  nrfSatisfaction: string;
-  feedback: string;
-}
-
 const INITIAL_REPORT: ReportData = {
   title: "", county: "", community: "",
   latitude: null, longitude: null,
   conditionType: "", severity: "", description: "", photos: [],
 };
 
-const INITIAL_SURVEY: SurveyData = {
-  roadUserType: "", roadRating: "", roadProblems: [], holdingUp: "",
-  responseTime: "", transportImprovement: "", accessImprovement: "",
-  nrfAware: "", valueForMoney: "", nrfSatisfaction: "", feedback: "",
-};
-
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2;
+type SurveyPrompt = "offered" | "open" | "done" | "skipped";
 
 /* ── Component ── */
 
 export function ReportForm() {
   const [step, setStep]         = useState<Step>(1);
   const [form, setForm]         = useState<ReportData>(INITIAL_REPORT);
-  const [survey, setSurvey]     = useState<SurveyData>(INITIAL_SURVEY);
   const [detecting, setDetect]  = useState(false);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [submitting, setSubmit] = useState(false);
-  const [submitted, setDone]    = useState(false);
+  const [reference, setRef]     = useState<string | null>(null);
+  const [surveyPrompt, setSurveyPrompt] = useState<SurveyPrompt>("offered");
   const watchIdRef = useRef<number | null>(null);
 
   type PhotoCheck = { status: "idle" | "checking" | "ok" | "warn"; message: string };
@@ -263,7 +79,6 @@ export function ReportForm() {
   const [photoChecks, setPhotoChecks]      = useState<PhotoCheck[]>([]);
 
   const update    = (patch: Partial<ReportData>) => setForm((p) => ({ ...p, ...patch }));
-  const upSurvey  = (patch: Partial<SurveyData>) => setSurvey((p) => ({ ...p, ...patch }));
 
   /* ── Photo AI check ── */
   const classifyPhoto = async (file: File, index: number, conditionType: ConditionType) => {
@@ -384,9 +199,6 @@ export function ReportForm() {
         form.description.trim().length >= 10 && form.photos.length > 0 &&
         !photoChecks.some((c) => c?.status === "checking" || c?.status === "warn")
       );
-      case 3: return !!survey.roadUserType && !!survey.roadRating && !!survey.holdingUp;
-      case 4: return !!survey.responseTime && !!survey.transportImprovement && !!survey.accessImprovement;
-      case 5: return !!survey.nrfAware && !!survey.valueForMoney && !!survey.nrfSatisfaction;
       default: return false;
     }
   };
@@ -410,28 +222,7 @@ export function ReportForm() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Submission failed");
 
-      // Survey submitted silently — failure here must not break the report success
-      fetch("/api/survey", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          county: form.county, community: form.community,
-          reportReference: json.reference_number,
-          roadUserType:         survey.roadUserType,
-          roadRating:           Number(survey.roadRating),
-          roadProblems:         survey.roadProblems,
-          holdingUp:            survey.holdingUp,
-          responseTime:         survey.responseTime,
-          transportImprovement: survey.transportImprovement,
-          accessImprovement:    survey.accessImprovement,
-          nrfAware:             survey.nrfAware,
-          valueForMoney:        Number(survey.valueForMoney),
-          nrfSatisfaction:      Number(survey.nrfSatisfaction),
-          feedback:             survey.feedback,
-        }),
-      }).catch(() => {});
-
-      setDone(true);
+      setRef(json.reference_number);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
@@ -446,32 +237,68 @@ export function ReportForm() {
   /* ── Reset ── */
   const reset = () => {
     setForm(INITIAL_REPORT);
-    setSurvey(INITIAL_SURVEY);
     setPreviewUrls([]);
     setPhotoChecks([]);
-    setDone(false);
+    setRef(null);
+    setSurveyPrompt("offered");
     setStep(1);
   };
 
-  /* ── Success screen ── */
-  if (submitted) {
+  /* ── Success screen — always offers the optional survey ── */
+  if (reference) {
     return (
-      <div className="rounded-lg border border-border bg-white shadow-sm overflow-hidden">
-        <div className="px-6 py-14 text-center sm:px-8 sm:py-16">
-          <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-green-100">
-            <CheckCircle className="size-8 text-green-600" />
-          </div>
-          <h2 className="mt-6 font-[family-name:var(--font-heading)] text-2xl font-semibold">
-            Thank you for taking action!
-          </h2>
-          <p className="mt-3 mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
-            Your report has been received. Together we can keep Liberia&apos;s roads safe.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <button onClick={reset} className="btn btn-secondary">Submit another report</button>
-            <a href="/" className="btn btn-outline-blue">Back to home</a>
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-white shadow-sm overflow-hidden">
+          <div className="px-6 py-12 text-center sm:px-8 sm:py-14">
+            <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle className="size-8 text-green-600" />
+            </div>
+            <h2 className="mt-6 font-[family-name:var(--font-heading)] text-2xl font-semibold">
+              Thank you for taking action!
+            </h2>
+            <p className="mt-3 mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
+              Your report has been received.
+            </p>
+            {(surveyPrompt === "done" || surveyPrompt === "skipped") && (
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+                <button onClick={reset} className="btn btn-secondary">Submit another report</button>
+                <Link href="/" className="btn btn-outline-blue">Back to home</Link>
+              </div>
+            )}
           </div>
         </div>
+
+        {surveyPrompt === "offered" && (
+          <div className="rounded-lg border border-[var(--nrf-blue)]/20 bg-[var(--nrf-blue)]/5 p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--nrf-blue)]/10">
+                <ClipboardList className="size-5 text-[var(--nrf-blue)]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">Got 2 minutes? Help us improve roads</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Tell us how roads affect daily life in {form.community}.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button onClick={() => setSurveyPrompt("open")} className="btn btn-secondary btn-sm">
+                Take the survey
+              </button>
+              <button onClick={() => setSurveyPrompt("skipped")} className="inline-flex h-9 items-center rounded-md px-3 text-xs font-medium text-muted-foreground hover:text-foreground">
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+
+        {surveyPrompt === "open" && (
+          <SurveyForm
+            report={{ county: form.county, community: form.community, reportReference: reference }}
+            onDone={() => { setSurveyPrompt("done"); toast.success("Survey submitted — thank you!"); }}
+            onSkip={() => setSurveyPrompt("skipped")}
+          />
+        )}
       </div>
     );
   }
@@ -483,34 +310,7 @@ export function ReportForm() {
   return (
     <div className="rounded-lg border border-border bg-white shadow-sm">
 
-      {/* Step indicator */}
-      <div className="border-b border-border px-4 py-4 sm:px-6">
-        <div className="flex items-center">
-          {([1, 2, 3, 4, 5] as const).map((n, i) => (
-            <div key={n} className="flex min-w-0 items-center">
-              {i > 0 && (
-                <div className={cn("h-px flex-1 mx-1 bg-border sm:mx-2", step > i && "bg-[var(--nrf-blue)]")} />
-              )}
-              <div className="flex shrink-0 items-center gap-1.5">
-                <div className={cn(
-                  "flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors sm:size-7 sm:text-xs",
-                  step === n ? "bg-[var(--nrf-blue)] text-white"
-                    : step > n ? "bg-[var(--nrf-blue)]/20 text-[var(--nrf-blue)]"
-                    : "bg-muted text-muted-foreground",
-                )}>
-                  {step > n ? "✓" : n}
-                </div>
-                <span className={cn(
-                  "hidden text-[11px] font-medium sm:block",
-                  step >= n ? "text-foreground" : "text-muted-foreground",
-                )}>
-                  {STEP_LABELS[i]}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <StepIndicator labels={STEP_LABELS} step={step} />
 
       {/* Fields */}
       <div className="p-4 sm:p-6">
@@ -701,103 +501,6 @@ export function ReportForm() {
             </div>
           </div>
         )}
-
-        {/* ── STEP 3: Road & User ── */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div className="rounded-md border border-[var(--nrf-blue)]/20 bg-[var(--nrf-blue)]/5 px-4 py-3 text-sm text-[var(--nrf-blue)]">
-              A few quick questions about road conditions in <strong>{form.community}, {form.county}</strong>.
-            </div>
-
-            <SelectField
-              id="road-user-type" label="What type of road user are you?" value={survey.roadUserType} required
-              onChange={(v) => upSurvey({ roadUserType: v })}
-              placeholder="Select…"
-              options={ROAD_USER_OPTIONS}
-            />
-
-            <SelectField
-              id="road-rating" label="How would you rate the current condition of your road?" value={survey.roadRating} required
-              onChange={(v) => upSurvey({ roadRating: v })}
-              placeholder="Select rating…"
-              options={ROAD_CONDITION_OPTIONS}
-            />
-
-            <div className="space-y-2">
-              <Label>What best describes your road condition? <span className="font-normal text-muted-foreground">(optional)</span></Label>
-              <CheckList values={survey.roadProblems} onChange={(v) => upSurvey({ roadProblems: v })} options={ROAD_PROBLEM_OPTIONS} />
-            </div>
-
-            <SelectField
-              id="holding-up" label="In your opinion, is the road holding up well after completion?" value={survey.holdingUp} required
-              onChange={(v) => upSurvey({ holdingUp: v })}
-              placeholder="Select…"
-              options={HOLDING_UP_OPTIONS}
-            />
-          </div>
-        )}
-
-        {/* ── STEP 4: Response & Impact ── */}
-        {step === 4 && (
-          <div className="space-y-5">
-            <SelectField
-              id="response-time" label="When potholes or road damages occur, how quickly do authorities respond?" value={survey.responseTime} required
-              onChange={(v) => upSurvey({ responseTime: v })}
-              placeholder="Select…"
-              options={RESPONSE_TIME_OPTIONS}
-            />
-
-            <SelectField
-              id="transport-improvement" label="Has this road improved transportation and movement in your area?" value={survey.transportImprovement} required
-              onChange={(v) => upSurvey({ transportImprovement: v })}
-              placeholder="Select…"
-              options={TRANSPORT_IMPROVEMENT_OPTIONS}
-            />
-
-            <SelectField
-              id="access-improvement" label="Has the road improved access to markets, schools, hospitals, and businesses?" value={survey.accessImprovement} required
-              onChange={(v) => upSurvey({ accessImprovement: v })}
-              placeholder="Select…"
-              options={ACCESS_IMPROVEMENT_OPTIONS}
-            />
-          </div>
-        )}
-
-        {/* ── STEP 5: NRF & Feedback ── */}
-        {step === 5 && (
-          <div className="space-y-5">
-            <SelectField
-              id="nrf-aware" label="Are you aware that road maintenance is funded through fuel levy collections managed by the National Road Fund?" value={survey.nrfAware} required
-              onChange={(v) => upSurvey({ nrfAware: v })}
-              placeholder="Select…"
-              options={NRF_AWARE_OPTIONS}
-            />
-
-            <SelectField
-              id="value-for-money" label="Do you believe citizens are receiving value for money from road projects funded through the fuel levy?" value={survey.valueForMoney} required
-              onChange={(v) => upSurvey({ valueForMoney: v })}
-              placeholder="Select…"
-              options={AGREEMENT_OPTIONS}
-            />
-
-            <SelectField
-              id="nrf-sat" label="Overall, how satisfied are you with roads funded by the National Road Fund?" value={survey.nrfSatisfaction} required
-              onChange={(v) => upSurvey({ nrfSatisfaction: v })}
-              placeholder="Select rating…"
-              options={SATISFACTION_OPTIONS}
-            />
-
-            <div className="space-y-1.5">
-              <Label htmlFor="feedback">
-                Additional comments <span className="font-normal text-muted-foreground">(optional)</span>
-              </Label>
-              <Textarea id="feedback" rows={4} maxLength={500}
-                placeholder="Any other feedback on road conditions, safety, or NRF performance…"
-                value={survey.feedback} onChange={(e) => upSurvey({ feedback: e.target.value })} />
-              <p className="text-right text-xs text-muted-foreground">{survey.feedback.length}/500</p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Navigation */}
@@ -810,14 +513,8 @@ export function ReportForm() {
           <span />
         )}
 
-        {step < 5 ? (
-          <button type="button" disabled={!canGoNext()} onClick={() => {
-            if (step === 2 && survey.roadProblems.length === 0) {
-              const mapped = CONDITION_TO_PROBLEM[form.conditionType];
-              if (mapped) upSurvey({ roadProblems: [mapped] });
-            }
-            setStep((s) => (s + 1) as Step);
-          }}
+        {step < 2 ? (
+          <button type="button" disabled={!canGoNext()} onClick={() => setStep((s) => (s + 1) as Step)}
             className="btn btn-secondary disabled:opacity-40">
             Continue <ChevronRight className="size-4" />
           </button>

@@ -2,13 +2,20 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Calendar, Globe, Star, ClipboardList, CheckCircle, XCircle, AlertCircle, TrendingUp, Minus, TrendingDown } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Globe, Star, ClipboardList } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { RoadReport } from "@/lib/types";
 import { CONDITION_LABELS, SEVERITY_COLORS, SEVERITY_LABELS, STATUS_COLORS, STATUS_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ReportStatusEditor } from "@/components/admin/report-status-editor";
 import { ReportNotes, type ReportNote } from "@/components/admin/report-notes";
+
+const SURVEY_LABELS = {
+  roadUser:     { driver: "Driver", pedestrian: "Pedestrian", public_transport: "Public Transport", trader: "Trader" },
+  holdingUp:    { yes: "Yes", somewhat: "Somewhat", no: "No" },
+  responseTime: { within_1m: "Within 1 month", within_3m: "Within 3 months", within_6m: "Within 6 months", over_6m: "More than 6 months", no_response: "No response" },
+  improvement:  { significantly: "Significantly", somewhat: "Somewhat", no_change: "No change", worse: "Made things worse", not_at_all: "Not at all" },
+} as Record<string, Record<string, string>>;
 
 async function getReport(reference: string): Promise<RoadReport | null> {
   const { data } = await supabase
@@ -141,12 +148,10 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
               </div>
 
               {/* Ratings */}
-              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mb-4 grid grid-cols-2 gap-3">
                 {[
-                  { label: "Road condition", value: citizenSurvey.road_rating },
-                  { label: "Safety",         value: citizenSurvey.safety_rating },
-                  { label: "Maint. sat.",    value: citizenSurvey.maint_satisfaction },
-                  { label: "NRF sat.",       value: citizenSurvey.nrf_satisfaction },
+                  { label: "Value for money", value: citizenSurvey.value_for_money },
+                  { label: "NRF satisfaction", value: citizenSurvey.nrf_satisfaction },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-lg border border-border px-3 py-2 text-center">
                     <p className="text-xs text-muted-foreground">{label}</p>
@@ -164,49 +169,20 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
               </div>
 
               <dl className="space-y-2 text-sm">
-                {citizenSurvey.road_problems?.length > 0 && (
-                  <div className="flex gap-2">
-                    <dt className="w-32 shrink-0 text-xs text-muted-foreground">Problems</dt>
-                    <dd className="text-xs">{citizenSurvey.road_problems.join(", ")}</dd>
+                {[
+                  { label: "Road user",       value: SURVEY_LABELS.roadUser[citizenSurvey.road_user_type] },
+                  { label: "Holding up",      value: SURVEY_LABELS.holdingUp[citizenSurvey.holding_up] },
+                  { label: "Response time",   value: SURVEY_LABELS.responseTime[citizenSurvey.response_time] },
+                  { label: "Transport",       value: SURVEY_LABELS.improvement[citizenSurvey.transport_improvement] },
+                  { label: "Access",          value: SURVEY_LABELS.improvement[citizenSurvey.access_improvement] },
+                  { label: "NRF aware",       value: citizenSurvey.nrf_aware == null ? undefined : citizenSurvey.nrf_aware ? "Yes" : "No" },
+                  { label: "Comments",        value: citizenSurvey.feedback },
+                ].filter((row) => row.value).map(({ label, value }) => (
+                  <div key={label} className="flex gap-2">
+                    <dt className="w-32 shrink-0 text-xs text-muted-foreground">{label}</dt>
+                    <dd className="text-xs leading-relaxed text-foreground/80">{value}</dd>
                   </div>
-                )}
-                <div className="flex gap-2">
-                  <dt className="w-32 shrink-0 text-xs text-muted-foreground">Maintenance</dt>
-                  <dd className="flex items-center gap-1 text-xs">
-                    {citizenSurvey.maintenance_done === "yes"    && <><CheckCircle  className="size-3.5 text-green-600"  /> Done</>}
-                    {citizenSurvey.maintenance_done === "no"     && <><XCircle      className="size-3.5 text-red-500"    /> Not done</>}
-                    {citizenSurvey.maintenance_done === "unsure" && <><AlertCircle  className="size-3.5 text-amber-500"  /> Not sure</>}
-                    {citizenSurvey.maint_delivered && (
-                      <span className="ml-2 text-muted-foreground">
-                        · delivered: {citizenSurvey.maint_delivered === "yes" ? "fully" : citizenSurvey.maint_delivered}
-                      </span>
-                    )}
-                  </dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-32 shrink-0 text-xs text-muted-foreground">Transport cost</dt>
-                  <dd className="flex items-center gap-1 text-xs">
-                    {citizenSurvey.transport_cost === "increased"  && <><TrendingUp   className="size-3.5 text-red-500"   /> Increased</>}
-                    {citizenSurvey.transport_cost === "same"       && <><Minus         className="size-3.5 text-muted-foreground" /> Stayed same</>}
-                    {citizenSurvey.transport_cost === "decreased"  && <><TrendingDown  className="size-3.5 text-green-600" /> Decreased</>}
-                  </dd>
-                </div>
-                {citizenSurvey.impact_areas?.length > 0 && (
-                  <div className="flex gap-2">
-                    <dt className="w-32 shrink-0 text-xs text-muted-foreground">Impact on</dt>
-                    <dd className="text-xs">{citizenSurvey.impact_areas.join(", ")}</dd>
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <dt className="w-32 shrink-0 text-xs text-muted-foreground">NRF aware</dt>
-                  <dd className="text-xs">{citizenSurvey.nrf_aware ? "Yes" : "No"}</dd>
-                </div>
-                {citizenSurvey.feedback && (
-                  <div className="flex gap-2">
-                    <dt className="w-32 shrink-0 text-xs text-muted-foreground">Comments</dt>
-                    <dd className="text-xs leading-relaxed text-foreground/80">{citizenSurvey.feedback}</dd>
-                  </div>
-                )}
+                ))}
               </dl>
             </div>
           ) : (
