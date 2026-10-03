@@ -184,22 +184,6 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-
-      {/* ── CTA BAND ── */}
-      <section className="bg-[var(--nrf-blue)] px-4 py-16 text-white md:px-8">
-        <div className="mx-auto max-w-6xl text-center">
-          <h2 className="font-[family-name:var(--font-heading)] text-3xl font-semibold md:text-4xl">
-            See a damaged road? Report it now.
-          </h2>
-          <p className="mx-auto mt-4 max-w-md text-base text-white/75">
-            Takes less than 3 minutes. No account required.
-          </p>
-          <Link href="/submit" className="btn btn-primary btn-lg mt-8">
-            Report a Road Condition
-            <ArrowRight className="size-4" />
-          </Link>
-        </div>
-      </section>
     </>
   );
 }
