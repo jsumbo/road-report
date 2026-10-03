@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { supabase } from "@/lib/supabase";
 import { MapView } from "@/components/public/map-view";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MapPinned, MapPin, Camera, Send } from "lucide-react";
 
 export const metadata = { title: "Road Conditions Map" };
 
@@ -137,18 +137,45 @@ export default async function MapPage() {
 
       {/* Map */}
       <div className="relative flex-1" style={{ height: "calc(100dvh - 160px)", minHeight: 500 }}>
-        {reports.length === 0 ? (
-          <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-3 text-center">
-            <p className="font-medium text-muted-foreground">No reports with GPS data yet</p>
-            <p className="text-sm text-muted-foreground/70">
-              Submitted reports with GPS coordinates will appear here.
-            </p>
-            <Link href="/submit" className="btn btn-secondary mt-2">
-              Submit the first report
-            </Link>
-          </div>
-        ) : (
+        <div className="absolute inset-0">
           <MapView reports={reports} />
+        </div>
+
+        {/* Empty state — a compact card over the map, so Liberia's counties still show */}
+        {reports.length === 0 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-6 z-[1000] flex justify-center px-4">
+            <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-border bg-white/95 p-5 shadow-lg backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--nrf-blue)]/10">
+                  <MapPinned className="size-5 text-[var(--nrf-blue)]" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-foreground">No reports yet</h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    Reported roads will appear here, pinned to their county.
+                  </p>
+                </div>
+              </div>
+
+              <ul className="mt-4 flex items-center justify-between gap-2 border-y border-border py-3 text-[11px] font-medium text-muted-foreground">
+                {[
+                  { icon: MapPin, label: "Locate" },
+                  { icon: Camera, label: "Photograph" },
+                  { icon: Send,   label: "Submit" },
+                ].map(({ icon: Icon, label }) => (
+                  <li key={label} className="flex items-center gap-1.5">
+                    <Icon className="size-3.5 text-[var(--nrf-blue)]" />
+                    {label}
+                  </li>
+                ))}
+              </ul>
+
+              <Link href="/submit" className="btn btn-primary btn-sm mt-4 w-full">
+                Submit the first report
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   MapContainer, TileLayer, Marker, Popup, Pane, Polygon,
-  LayersControl, GeoJSON, useMap,
+  LayersControl, GeoJSON, useMap, useMapEvents,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet/dist/leaflet.css";
@@ -12,6 +12,11 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
 import type { MapReport } from "@/app/(public)/map/page";
 import { CONDITION_LABELS, SEVERITY_LABELS } from "@/lib/types";
+import { LIBERIA_COUNTIES, type LiberiaCounty } from "@/lib/counties";
+import { countyAt, COUNTY_FEATURES, COUNTY_LABEL_POINTS, LIBERIA_OUTLINE, LIBERIA_BOUNDS } from "@/lib/geo";
+
+/* Below this zoom the map summarises by county; at or above it, individual pins show. */
+const PIN_ZOOM = 9;
 
 /* ── Cluster bubble icon — matches brand colours instead of the plugin default ── */
 function createClusterIcon(cluster: L.MarkerCluster) {
@@ -53,6 +58,8 @@ const SEVERITY_TEXT: Record<string, string> = {
   high:     "#9a3412",
   critical: "#7f1d1d",
 };
+
+const SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 
 /* ── Severity icon SVG for pin placeholder ── */
 function severityIconSvg(severity: string, color: string): string {
@@ -100,20 +107,22 @@ function pinIcon(severity: string, photoUrl?: string | null) {
   });
 }
 
-/* ── Force correct tile layout after mount ── */
-function SizeInvalidator() {
-  const map = useMap();
-  useEffect(() => { map.invalidateSize(); }, [map]);
-  return null;
-}
-
-/* ── Snap map to Liberia on first load ── */
-function LiberiaBoundsController() {
+/* ── Keep tiles laid out as the container resizes, and frame Liberia once it has a real size ── */
+function FitToLiberia() {
   const map = useMap();
   useEffect(() => {
-    map.setView([6.45, -9.43], 7);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const container = map.getContainer();
+    let framed = false;
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+      if (!framed && container.clientWidth > 0 && container.clientHeight > 0) {
+        map.fitBounds(LIBERIA_BOUNDS, { padding: [24, 24] });
+        framed = true;
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
   return null;
 }
 
@@ -128,131 +137,231 @@ function LayerTracker({ onLayerChange }: { onLayerChange: (name: string) => void
   return null;
 }
 
-/* ── Interactive county layer: hover tooltip + click popup ── */
-function CountyLayer({
-  borders,
-  activeLayer,
-  countyCounts,
-}: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  borders: any;
-  activeLayer: string;
-  countyCounts: Record<string, number>;
-}) {
-  if (!borders) return null;
+/* ── Per-county summary: report count and worst severity ── */
+interface CountyStats { count: number; worst: string | null }
 
-  const isSat       = activeLayer === "Satellite";
-  const borderColor = isSat ? "#ffffff" : "#1e3a8a";
-  const hoverFill   = isSat ? "#ffffff" : "#333e8d";
+/* ── County label — name, plus a count badge coloured by worst severity ── */
+function countyLabelIcon(name: string, stats: CountyStats) {
+  const badge = stats.count > 0
+    ? `<span style="
+        display:inline-flex;align-items:center;justify-content:center;
+        min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+        background:${SEVERITY_COLOR[stats.worst ?? ""] ?? "#333e8d"};color:#fff;
+        font-size:11px;font-weight:700;">${stats.count}</span>`
+    : "";
+  const pill = stats.count > 0
+    ? "background:#fff;border-radius:999px;padding:3px 4px 3px 10px;box-shadow:0 2px 8px rgba(18,20,28,0.18);cursor:pointer;"
+    : "text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;";
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;justify-content:center;">
+        <div style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:inherit;${pill}">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0.01em;color:${stats.count > 0 ? "#12141c" : "#4a4f63"};">${name}</span>
+          ${badge}
+        </div>
+      </div>`,
+    iconSize: [160, 26],
+    iconAnchor: [80, 13],
+  });
+}
+
+/* ── Counties: shaded polygons, labels when zoomed out, pins clustered per county when zoomed in ── */
+function CountyLayers({ reportsByCounty, activeLayer }: {
+  reportsByCounty: Record<LiberiaCounty, MapReport[]>;
+  activeLayer: string;
+}) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const showPins = zoom >= PIN_ZOOM;
+
+  const stats = useMemo(() => {
+    const acc = {} as Record<LiberiaCounty, CountyStats>;
+    for (const county of LIBERIA_COUNTIES) {
+      const list = reportsByCounty[county];
+      const worst = list.reduce<string | null>(
+        (w, r) => (SEVERITY_RANK[r.severity] ?? 0) > (SEVERITY_RANK[w ?? ""] ?? 0) ? r.severity : w, null);
+      acc[county] = { count: list.length, worst };
+    }
+    return acc;
+  }, [reportsByCounty]);
+  const maxCount = Math.max(1, ...Object.values(stats).map((s) => s.count));
+
+  /* Zoom into a county, far enough that its pins show */
+  const focusCounty = useCallback((name: LiberiaCounty) => {
+    const feature = COUNTY_FEATURES.features.find((f) => f.properties.name === name);
+    if (!feature) return;
+    const bounds = L.geoJSON(feature).getBounds();
+    const fit = map.getBoundsZoom(bounds, false, L.point(40, 40));
+    map.flyTo(bounds.getCenter(), Math.max(fit, PIN_ZOOM), { duration: 0.8 });
+  }, [map]);
+
+  const isSat  = activeLayer === "Satellite";
+  const isDark = activeLayer === "Dark";
+  const accent = isSat || isDark ? "#ffffff" : "#333e8d";
+
+  const fillFor = (name: LiberiaCounty) => {
+    const { count } = stats[name];
+    if (count === 0) return 0;
+    const base = 0.1 + 0.3 * (count / maxCount);
+    return showPins ? base * 0.4 : base;
+  };
 
   return (
-    <GeoJSON
-      key={`counties-${activeLayer}`}
-      data={borders}
-      pane="counties-pane"
-      style={() => ({
-        color:       borderColor,
-        weight:      1.5,
-        opacity:     isSat ? 0.85 : 0.7,
-        fillColor:   hoverFill,
-        fillOpacity: 0,
-      })}
-      onEachFeature={(feature, layer) => {
-        const name  = feature.properties?.NAME_1 ?? "Unknown";
-        const count = countyCounts[name] ?? 0;
+    <>
+      <GeoJSON
+        key={`counties-${activeLayer}-${showPins}-${maxCount}`}
+        data={COUNTY_FEATURES}
+        pane="counties-pane"
+        style={(feature) => ({
+          color:       isSat || isDark ? "#ffffff" : "#1e3a8a",
+          weight:      1.25,
+          opacity:     isSat ? 0.85 : 0.55,
+          fillColor:   accent,
+          fillOpacity: fillFor(feature?.properties.name),
+        })}
+        onEachFeature={(feature, layer) => {
+          const name  = feature.properties.name as LiberiaCounty;
+          const count = stats[name].count;
+          const base  = fillFor(name);
 
-        /* Dark sticky tooltip — follows cursor */
-        layer.bindTooltip(
-          `<div style="font-family:inherit;white-space:nowrap;">
-             <strong style="font-size:13px;color:#fff;">${name} County</strong>
-             <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:3px;">
-               <span style="color:#7b93ff;font-weight:700;">${count}</span>
-               &thinsp;report${count !== 1 ? "s" : ""}
-             </div>
-           </div>`,
-          { className: "nrf-county-tooltip", sticky: true, opacity: 1 }
-        );
+          layer.bindTooltip(
+            `<div style="font-family:inherit;white-space:nowrap;">
+               <strong style="font-size:13px;color:#fff;">${name} County</strong>
+               <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:3px;">
+                 <span style="color:#7b93ff;font-weight:700;">${count}</span>
+                 &thinsp;report${count !== 1 ? "s" : ""}${count > 0 && !showPins ? " · click to view" : ""}
+               </div>
+             </div>`,
+            { className: "nrf-county-tooltip", sticky: true, opacity: 1 },
+          );
 
-        /* Click popup with action */
-        layer.bindPopup(
-          `<div style="font-family:inherit;min-width:170px;padding:2px 0;">
-             <p style="font-weight:700;font-size:14px;color:#12141c;margin:0 0 5px;">${name} County</p>
-             <p style="font-size:12px;color:#4a4f63;margin:0 0 12px;">
-               <span style="color:#333e8d;font-weight:700;">${count}</span>
-               &nbsp;road report${count !== 1 ? "s" : ""}
-             </p>
-             <a href="/reports"
-                style="display:block;text-align:center;background:#333e8d;color:#fff;
-                       border-radius:6px;padding:7px 12px;font-size:12px;
-                       font-weight:600;text-decoration:none;">
-               Browse reports →
-             </a>
-           </div>`,
-          { closeButton: false }
-        );
+          layer.on({
+            mouseover: (e: L.LeafletMouseEvent) => (e.target as L.Path).setStyle({ fillOpacity: base + 0.1, weight: 2 }),
+            mouseout:  (e: L.LeafletMouseEvent) => (e.target as L.Path).setStyle({ fillOpacity: base, weight: 1.25 }),
+            click:     () => focusCounty(name),
+          });
+        }}
+      />
 
-        /* Highlight fill on hover */
-        layer.on({
-          mouseover(e: L.LeafletMouseEvent) {
-            (e.target as L.Path).setStyle({ fillOpacity: 0.14 });
-          },
-          mouseout(e: L.LeafletMouseEvent) {
-            (e.target as L.Path).setStyle({ fillOpacity: 0 });
-          },
-        });
-      }}
-    />
+      {/* ── Town and road names — only once zoomed in, so they don't compete with county labels ── */}
+      {showPins && activeLayer === "Clean" && (
+        <TileLayer
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+          pane="place-names-pane"
+          maxNativeZoom={16}
+        />
+      )}
+
+      {/* ── County labels (zoomed out) ── */}
+      {!showPins && LIBERIA_COUNTIES.map((name) => (
+        <Marker
+          key={`label-${name}-${stats[name].count}-${stats[name].worst}`}
+          position={COUNTY_LABEL_POINTS[name]}
+          icon={countyLabelIcon(name, stats[name])}
+          pane="labels-pane"
+          interactive={stats[name].count > 0}
+          zIndexOffset={stats[name].count > 0 ? 1000 : 0}
+          eventHandlers={{ click: () => focusCounty(name) }}
+        />
+      ))}
+
+      {/* ── Report pins (zoomed in) — clustered only within their own county ── */}
+      {showPins && LIBERIA_COUNTIES.filter((name) => stats[name].count > 0).map((name) => (
+        <MarkerClusterGroup
+          key={`cluster-${name}`}
+          iconCreateFunction={createClusterIcon}
+          maxClusterRadius={50}
+          spiderfyOnMaxZoom
+          showCoverageOnHover={false}
+        >
+          {reportsByCounty[name].map((report) => <ReportMarker key={report.id} report={report} />)}
+        </MarkerClusterGroup>
+      ))}
+    </>
   );
 }
 
-/* ── Mask constant — [lat, lon] Leaflet format ── */
-const MASK_BBOX: [number, number][] = [[-5, -25], [-5, 15], [25, 15], [25, -25]];
+/* ── Single report pin with photo popup ── */
+function ReportMarker({ report }: { report: MapReport }) {
+  return (
+    <Marker
+      position={[report.latitude, report.longitude]}
+      icon={pinIcon(report.severity, report.cover_photo_url)}
+    >
+      <Popup className="nrf-popup" maxWidth={280} minWidth={240}>
+        <div style={{ fontFamily: "inherit", borderRadius: 10, overflow: "hidden" }}>
+          {report.cover_photo_url && (
+            <div style={{ height: 150, overflow: "hidden" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={report.cover_photo_url}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+            </div>
+          )}
+          <div style={{ padding: "12px 14px 14px" }}>
+            <p style={{ fontWeight: 700, fontSize: 13, color: "#12141c", margin: "0 0 3px", lineHeight: 1.4 }}>
+              {report.title ?? CONDITION_LABELS[report.condition_type as keyof typeof CONDITION_LABELS]}
+            </p>
+            <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 10px" }}>
+              {report.community}, {report.county} County
+            </p>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              background: SEVERITY_BG[report.severity]   ?? "#f3f4f6",
+              color:      SEVERITY_TEXT[report.severity] ?? "#374151",
+              borderRadius: 4, padding: "3px 8px",
+              fontSize: 11, fontWeight: 700, marginBottom: 12,
+            }}>
+              <span style={{
+                width: 7, height: 7, borderRadius: "50%",
+                background: SEVERITY_COLOR[report.severity] ?? "#6b7280",
+                display: "inline-block", flexShrink: 0,
+              }} />
+              {SEVERITY_LABELS[report.severity as keyof typeof SEVERITY_LABELS]} severity
+            </span>
+            <a
+              href={`/reports/${report.reference_number}`}
+              style={{
+                display: "block", textAlign: "center",
+                background: "#333e8d", color: "#fff",
+                borderRadius: 6, padding: "7px 12px",
+                fontSize: 12, fontWeight: 600, textDecoration: "none",
+              }}
+            >
+              View full report →
+            </a>
+          </div>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
+/* ── Outside-Liberia mask — world box with Liberia cut out, as Leaflet [lat, lng] rings ── */
+const MASK_RINGS: [number, number][][] = [
+  [[-5, -25], [-5, 15], [25, 15], [25, -25]],
+  ...LIBERIA_OUTLINE.geometry.coordinates.map((poly) => poly[0].map(([lng, lat]) => [lat, lng] as [number, number])),
+];
 
 /* ── Main export ── */
 export function LeafletMap({ reports }: { reports: MapReport[] }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [borders, setBorders] = useState<any>(null);
-  const [mask,    setMask]    = useState<[number, number][][] | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [outline, setOutline] = useState<any>(null);
-  const [activeLayer,  setActiveLayer]  = useState("Street");
+  const [activeLayer,  setActiveLayer]  = useState("Clean");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  /* Count reports per county to display in county popups */
-  const countyCounts = useMemo(() => {
-    const acc: Record<string, number> = {};
-    for (const r of reports) acc[r.county] = (acc[r.county] ?? 0) + 1;
+  /* Group reports by the county their GPS falls in, falling back to the county they picked */
+  const reportsByCounty = useMemo(() => {
+    const acc = Object.fromEntries(LIBERIA_COUNTIES.map((c) => [c, [] as MapReport[]])) as Record<LiberiaCounty, MapReport[]>;
+    for (const r of reports) {
+      const county = countyAt(r.latitude, r.longitude) ?? (LIBERIA_COUNTIES.includes(r.county as LiberiaCounty) ? r.county as LiberiaCounty : null);
+      if (county) acc[county].push(r);
+    }
     return acc;
   }, [reports]);
-
-  useEffect(() => {
-    /* World-minus-Liberia mask + country outline */
-    fetch("https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_LBR_0.json")
-      .then((r) => r.json())
-      .then((data) => {
-        const feature = (data.features ?? [data])[0];
-        const geom = feature?.geometry;
-        if (!geom) return;
-        // Save raw feature for the country outline
-        setOutline({ type: "Feature", geometry: geom, properties: {} });
-        // Update mask with accurate GADM ring(s) — convert GeoJSON [lon,lat] → Leaflet [lat,lon]
-        const toLL = (ring: number[][]): [number, number][] =>
-          ring.map(([lon, lat]) => [lat, lon] as [number, number]);
-        const liberiaRings: [number, number][][] =
-          geom.type === "Polygon"
-            ? [toLL(geom.coordinates[0])]
-            : (geom.coordinates as number[][][][]).map(poly => toLL(poly[0]));
-        setMask([MASK_BBOX, ...liberiaRings]);
-      })
-      .catch(() => {});
-
-    /* County borders + polygons */
-    fetch("https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_LBR_1.json")
-      .then((r) => r.json())
-      .then(setBorders)
-      .catch(() => {});
-  }, []);
 
   const handleLayerChange = useCallback((name: string) => setActiveLayer(name), []);
 
@@ -299,12 +408,12 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         )}
       </button>
     <MapContainer
-      center={[6.5, -9.4]}
-      zoom={7}
+      bounds={LIBERIA_BOUNDS}
       minZoom={6}
       maxZoom={17}
       maxBounds={[[1, -16], [12, -3]]}
       maxBoundsViscosity={0.8}
+      zoomSnap={0.25}
       style={{ height: "100%", width: "100%", minHeight: 400 }}
       scrollWheelZoom
     >
@@ -312,132 +421,61 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
       <Pane name="mask-pane"     style={{ zIndex: 350 }} />
       <Pane name="outline-pane"  style={{ zIndex: 360 }} />
       <Pane name="counties-pane" style={{ zIndex: 400 }} />
-      <Pane name="reports-pane"  style={{ zIndex: 600 }} />
+      <Pane name="place-names-pane" style={{ zIndex: 420, pointerEvents: "none" }} />
+      <Pane name="labels-pane"   style={{ zIndex: 450 }} />
 
       {/* ── Base tile layers ── */}
       <LayersControl position="topright">
-        <BaseLayer checked name="Street">
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="" maxZoom={19} />
+        <BaseLayer checked name="Clean">
+          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" maxNativeZoom={16} />
         </BaseLayer>
-        <BaseLayer name="Light">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="" maxZoom={19} />
+        <BaseLayer name="Street">
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" maxZoom={19} />
         </BaseLayer>
         <BaseLayer name="Dark">
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="" maxZoom={19} />
+          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" maxNativeZoom={16} />
         </BaseLayer>
         <BaseLayer name="Terrain">
           <TileLayer url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png" attribution="" maxZoom={17} />
         </BaseLayer>
         <BaseLayer name="Satellite">
-          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="" maxZoom={19} />
+          <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Imagery &copy; Esri" maxZoom={19} />
         </BaseLayer>
       </LayersControl>
 
-      <SizeInvalidator />
-      <LiberiaBoundsController />
+      <FitToLiberia />
       <LayerTracker onLayerChange={handleLayerChange} />
 
-      {/* ── Outside-Liberia mask — bbox outer ring + Liberia hole (Leaflet evenodd default) ── */}
-      {mask && (
-        <Polygon
-          pane="mask-pane"
-          positions={mask}
-          pathOptions={{
-            fillColor:   "#a8a49e",
-            fillOpacity: 0.88,
-            color:       "transparent",
-            weight:      0,
-          }}
-        />
-      )}
-
-      {/* ── Liberia country outline ── */}
-      {outline && (
-        <GeoJSON
-          key={`outline-${activeLayer}`}
-          data={outline}
-          pane="outline-pane"
-          interactive={false}
-          style={() =>
-            activeLayer === "Dark"
-              ? { color: "#e2e8f0", weight: 3, opacity: 1, fillOpacity: 0 }
-              : activeLayer === "Satellite"
-              ? { color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0 }
-              : { color: "#1e3a8a", weight: 3.5, opacity: 1, fillColor: "#dbeafe", fillOpacity: 0.18 }
-          }
-        />
-      )}
-
-      {/* ── County polygons — hover + click interactive ── */}
-      <CountyLayer
-        borders={borders}
-        activeLayer={activeLayer}
-        countyCounts={countyCounts}
+      {/* ── Outside-Liberia mask — world box with Liberia cut out (Leaflet evenodd fill) ── */}
+      <Polygon
+        pane="mask-pane"
+        positions={MASK_RINGS}
+        interactive={false}
+        pathOptions={{
+          fillColor:   activeLayer === "Dark" ? "#0b0d12" : "#d9d6cf",
+          fillOpacity: 0.85,
+          color:       "transparent",
+          weight:      0,
+        }}
       />
 
-      {/* ── Report markers — clustered when overlapping/nearby ── */}
-      <MarkerClusterGroup
-        iconCreateFunction={createClusterIcon}
-        maxClusterRadius={60}
-        spiderfyOnMaxZoom
-        showCoverageOnHover={false}
-      >
-      {reports.map((report) => (
-        <Marker
-          key={report.id}
-          position={[report.latitude, report.longitude]}
-          icon={pinIcon(report.severity, report.cover_photo_url)}
-        >
-          <Popup className="nrf-popup" maxWidth={280} minWidth={240}>
-            <div style={{ fontFamily: "inherit", borderRadius: 10, overflow: "hidden" }}>
-              {report.cover_photo_url && (
-                <div style={{ height: 150, overflow: "hidden" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={report.cover_photo_url}
-                    alt=""
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
-                </div>
-              )}
-              <div style={{ padding: "12px 14px 14px" }}>
-                <p style={{ fontWeight: 700, fontSize: 13, color: "#12141c", margin: "0 0 3px", lineHeight: 1.4 }}>
-                  {report.title ?? CONDITION_LABELS[report.condition_type as keyof typeof CONDITION_LABELS]}
-                </p>
-                <p style={{ fontSize: 12, color: "#6b7280", margin: "0 0 10px" }}>
-                  {report.community}, {report.county} County
-                </p>
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: 5,
-                  background: SEVERITY_BG[report.severity]   ?? "#f3f4f6",
-                  color:      SEVERITY_TEXT[report.severity] ?? "#374151",
-                  borderRadius: 4, padding: "3px 8px",
-                  fontSize: 11, fontWeight: 700, marginBottom: 12,
-                }}>
-                  <span style={{
-                    width: 7, height: 7, borderRadius: "50%",
-                    background: SEVERITY_COLOR[report.severity] ?? "#6b7280",
-                    display: "inline-block", flexShrink: 0,
-                  }} />
-                  {SEVERITY_LABELS[report.severity as keyof typeof SEVERITY_LABELS]} severity
-                </span>
-                <a
-                  href={`/reports/${report.reference_number}`}
-                  style={{
-                    display: "block", textAlign: "center",
-                    background: "#333e8d", color: "#fff",
-                    borderRadius: 6, padding: "7px 12px",
-                    fontSize: 12, fontWeight: 600, textDecoration: "none",
-                  }}
-                >
-                  View full report →
-                </a>
-              </div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-      </MarkerClusterGroup>
+      {/* ── Liberia country outline ── */}
+      <GeoJSON
+        key={`outline-${activeLayer}`}
+        data={LIBERIA_OUTLINE}
+        pane="outline-pane"
+        interactive={false}
+        style={() =>
+          activeLayer === "Dark"
+            ? { color: "#e2e8f0", weight: 3, opacity: 1, fillOpacity: 0 }
+            : activeLayer === "Satellite"
+            ? { color: "#ffffff", weight: 3, opacity: 1, fillOpacity: 0 }
+            : { color: "#1e3a8a", weight: 3, opacity: 0.9, fillColor: "#ffffff", fillOpacity: 0.25 }
+        }
+      />
+
+      {/* ── Counties, labels and report pins ── */}
+      <CountyLayers reportsByCounty={reportsByCounty} activeLayer={activeLayer} />
     </MapContainer>
     </div>
   );
