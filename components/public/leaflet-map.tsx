@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   MapContainer, TileLayer, Marker, Popup, Pane, Polygon,
-  LayersControl, GeoJSON, useMap, useMapEvents,
+  LayersControl, GeoJSON, ZoomControl, useMap, useMapEvents,
 } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import L from "leaflet";
-import type { MapReport } from "@/app/(public)/map/page";
+import type { MapReport } from "@/app/(map)/map/page";
 import { CONDITION_LABELS, SEVERITY_LABELS } from "@/lib/types";
 import { LIBERIA_COUNTIES, type LiberiaCounty } from "@/lib/counties";
 import { countyAt, COUNTY_FEATURES, COUNTY_LABEL_POINTS, LIBERIA_OUTLINE, LIBERIA_BOUNDS } from "@/lib/geo";
@@ -116,7 +116,8 @@ function FitToLiberia() {
     const observer = new ResizeObserver(() => {
       map.invalidateSize();
       if (!framed && container.clientWidth > 0 && container.clientHeight > 0) {
-        map.fitBounds(LIBERIA_BOUNDS, { padding: [24, 24] });
+        // Leave room for the floating legend at the top
+        map.fitBounds(LIBERIA_BOUNDS, { paddingTopLeft: [24, 140], paddingBottomRight: [24, 24] });
         framed = true;
       }
     });
@@ -136,6 +137,12 @@ function LayerTracker({ onLayerChange }: { onLayerChange: (name: string) => void
   }, [map, onLayerChange]);
   return null;
 }
+
+/* ── Town and road names drawn over label-free base layers once zoomed in ── */
+const PLACE_NAMES: Record<string, string> = {
+  Clean:     "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+  Satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+};
 
 /* ── Per-county summary: report count and worst severity ── */
 interface CountyStats { count: number; worst: string | null }
@@ -246,9 +253,10 @@ function CountyLayers({ reportsByCounty, activeLayer }: {
       />
 
       {/* ── Town and road names — only once zoomed in, so they don't compete with county labels ── */}
-      {showPins && activeLayer === "Clean" && (
+      {showPins && PLACE_NAMES[activeLayer] && (
         <TileLayer
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+          key={`place-names-${activeLayer}`}
+          url={PLACE_NAMES[activeLayer]}
           pane="place-names-pane"
           maxNativeZoom={16}
         />
@@ -349,9 +357,7 @@ const MASK_RINGS: [number, number][][] = [
 
 /* ── Main export ── */
 export function LeafletMap({ reports }: { reports: MapReport[] }) {
-  const [activeLayer,  setActiveLayer]  = useState("Clean");
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [activeLayer,  setActiveLayer]  = useState("Street");
 
   /* Group reports by the county their GPS falls in, falling back to the county they picked */
   const reportsByCounty = useMemo(() => {
@@ -365,48 +371,8 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
 
   const handleLayerChange = useCallback((name: string) => setActiveLayer(name), []);
 
-  const toggleFullscreen = useCallback(() => {
-    const el = wrapperRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) {
-      el.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
-  }, []);
-
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-
   return (
-    <div ref={wrapperRef} className="relative h-full w-full">
-      {/* Fullscreen toggle button */}
-      <button
-        onClick={toggleFullscreen}
-        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-        style={{
-          position: "absolute", bottom: 32, right: 10, zIndex: 1000,
-          background: "#fff", border: "2px solid rgba(0,0,0,0.2)",
-          borderRadius: 4, width: 30, height: 30,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-        }}
-      >
-        {isFullscreen ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
-            <path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 7V3h4"/><path d="M21 7V3h-4"/>
-            <path d="M3 17v4h4"/><path d="M21 17v4h-4"/>
-          </svg>
-        )}
-      </button>
+    <div className="relative h-full w-full">
     <MapContainer
       bounds={LIBERIA_BOUNDS}
       minZoom={6}
@@ -416,6 +382,7 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
       zoomSnap={0.25}
       style={{ height: "100%", width: "100%", minHeight: 400 }}
       scrollWheelZoom
+      zoomControl={false}
     >
       {/* ── Custom panes — control rendering order ── */}
       <Pane name="mask-pane"     style={{ zIndex: 350 }} />
@@ -425,11 +392,12 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
       <Pane name="labels-pane"   style={{ zIndex: 450 }} />
 
       {/* ── Base tile layers ── */}
-      <LayersControl position="topright">
-        <BaseLayer checked name="Clean">
+      <ZoomControl position="bottomright" />
+      <LayersControl position="bottomright">
+        <BaseLayer name="Clean">
           <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}" attribution="Tiles &copy; Esri" maxNativeZoom={16} />
         </BaseLayer>
-        <BaseLayer name="Street">
+        <BaseLayer checked name="Street">
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" maxZoom={19} />
         </BaseLayer>
         <BaseLayer name="Dark">
@@ -452,8 +420,8 @@ export function LeafletMap({ reports }: { reports: MapReport[] }) {
         positions={MASK_RINGS}
         interactive={false}
         pathOptions={{
-          fillColor:   activeLayer === "Dark" ? "#0b0d12" : "#d9d6cf",
-          fillOpacity: 0.85,
+          fillColor:   activeLayer === "Dark" || activeLayer === "Satellite" ? "#0b0d12" : "#d9d6cf",
+          fillOpacity: activeLayer === "Satellite" ? 0.65 : 0.85,
           color:       "transparent",
           weight:      0,
         }}

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import { NrfLogo } from "@/components/brand/nrf-logo";
+import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/about",   label: "About" },
@@ -12,13 +13,17 @@ const NAV = [
   { href: "/survey",  label: "Survey" },
 ];
 
-export function SiteHeader() {
+/** `overlay` floats the header over full-screen content (the map) without blocking clicks around it. */
+export function SiteHeader({ overlay = false }: { overlay?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 bg-transparent px-4 pt-3 md:px-8">
+    <header className={cn(
+      "top-0 z-50 bg-transparent px-4 pt-3 md:px-8",
+      overlay ? "pointer-events-none fixed inset-x-0 z-[1100]" : "sticky",
+    )}>
       {/* Floating pill */}
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--nrf-ink)]/95 px-4 shadow-md backdrop-blur-md md:px-6">
+      <div className="pointer-events-auto mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[var(--nrf-ink)]/95 px-4 shadow-md backdrop-blur-md md:px-6">
         <NrfLogo variant="mark" href="/" className="lg:hidden" priority />
         <NrfLogo variant="full" href="/" className="hidden lg:inline-flex" priority />
 
@@ -52,7 +57,7 @@ export function SiteHeader() {
 
       {/* Mobile menu — also a floating pill */}
       {open && (
-        <div className="mx-auto mt-2 max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-[var(--nrf-ink)] shadow-md md:hidden">
+        <div className="pointer-events-auto mx-auto mt-2 max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-[var(--nrf-ink)] shadow-md md:hidden">
           <nav className="flex flex-col px-4 pb-4 pt-2" aria-label="Mobile navigation">
             {NAV.map(({ href, label }) => (
               <Link
