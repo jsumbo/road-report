@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LIBERIA_COUNTIES } from "@/lib/counties";
 import { SelectField, StepIndicator, type SelectOption } from "@/components/form/fields";
+import { readJson } from "@/lib/compress-image";
 
 /* ── Option definitions ── */
 
@@ -161,7 +162,7 @@ export function SurveyForm({ report, onDone, onSkip }: {
           feedback:             survey.feedback,
         }),
       });
-      const json = await res.json();
+      const json = await readJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? "Submission failed");
       if (onDone) onDone();
       else setDone(true);

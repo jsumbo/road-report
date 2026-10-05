@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LIBERIA_COUNTIES, type LiberiaCounty } from "@/lib/counties";
 import { countyAt, OUTSIDE_LIBERIA_MESSAGE } from "@/lib/geo";
+import { compressImage, readJson } from "@/lib/compress-image";
 import { cn } from "@/lib/utils";
 import type { ConditionType, ReportSeverity } from "@/lib/types";
 import { SelectField, StepIndicator, type SelectOption } from "@/components/form/fields";
@@ -175,11 +176,11 @@ export function ReportForm() {
 
   /* ── Photos ── */
   const addPhotos = useCallback(
-    (files: FileList | null) => {
+    async (files: FileList | null) => {
       if (!files) return;
       const remaining = 5 - form.photos.length;
       if (remaining <= 0) { toast.error("Maximum 5 photos allowed."); return; }
-      const newFiles = Array.from(files).slice(0, remaining);
+      const newFiles = await Promise.all(Array.from(files).slice(0, remaining).map(compressImage));
       const newUrls  = newFiles.map((f) => URL.createObjectURL(f));
       const startIdx = form.photos.length;
       update({ photos: [...form.photos, ...newFiles] });
@@ -232,8 +233,8 @@ export function ReportForm() {
       form.photos.forEach((photo) => body.append("photos", photo));
 
       const res  = await fetch("/api/reports", { method: "POST", body });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Submission failed");
+      const json = await readJson<{ error?: string; reference_number?: string }>(res);
+      if (!res.ok || !json.reference_number) throw new Error(json.error ?? "Submission failed");
 
       setRef(json.reference_number);
     } catch (err) {
